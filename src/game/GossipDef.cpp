@@ -54,7 +54,20 @@ void GossipMenu::AddMenuItem(uint8 Icon, const std::string& Message, uint32 dtSe
 
     m_gItems.push_back(gItem);
 }
+void GossipMenu::AddGossipMenuId(uint32 menuId)
+{
+	GossipMenuItemsMapBounds bounds = sObjectMgr.GetGossipMenuItemsMapBounds(menuId);
+	/// Return if there are none.
+	if (bounds.first == bounds.second)
+		return;
 
+	/// Iterate over each of them.
+	for (GossipMenuItemsMap::const_iterator itr = bounds.first; itr != bounds.second; ++itr)
+	{
+		if (itr->second.option_id == 3)
+			AddMenuItem(itr->second.option_icon, itr->second.option_text, itr->second.npc_option_npcflag, itr->second.action_menu_id, itr->second.box_text, itr->second.box_coded);
+	}
+}
 void GossipMenu::AddGossipMenuItemData(int32 action_menu, uint32 action_poi, uint32 action_script)
 {
     GossipMenuItemData pItemData;

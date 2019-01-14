@@ -295,7 +295,25 @@ class MANGOS_DLL_SPEC WorldSession
         void SendPartyResult(PartyOperation operation, const std::string& member, PartyResult res);
         void SendAreaTriggerMessage(const char* Text, ...) ATTR_PRINTF(2,3);
         void SendQueryTimeResponse();
+		/*********************************************************/
+		/***               自制添加 SYSTEM +++                 ***/
+		/*********************************************************/
+		uint32 GetTalen() const { return _talen_; }//获取额外天赋点
+		void SetTalen(uint32 tp) { _talen_ = tp; }//设置额外天赋点
 
+		uint32 GetTF() const { return _tf_; }//获取保存天赋状态
+		void SetTF(uint32 tp) { _tf_ = tp; }//设置保存天赋状态
+
+		uint32 GetZC() const { return _zc_; }//获取主城传送状态
+		void SetZC(uint32 tp) { _zc_ = tp; }//设置主城传送状态
+
+		uint32 GetSF() const { return _sf_; }//获取瞬飞状态
+		void SetSF(uint32 tp) { _sf_ = tp; }//设置瞬飞状态
+
+		uint32 GetPID() const { return _pid_; }//获取邀请人ID
+		void SetPID(uint32 tp) { _pid_ = tp; }//设置邀请人ID
+
+		/*********************************************************/
         AccountTypes GetSecurity() const { return _security; }
         uint32 GetAccountId() const { return _accountId; }
         std::string GetUsername() const { return m_username; }
@@ -355,6 +373,7 @@ class MANGOS_DLL_SPEC WorldSession
         void SendTrainingFailure(ObjectGuid guid, uint32 serviceId, uint32 errorCode);
 
         void SendListInventory(ObjectGuid guid, uint8 menu_type = VENDOR_MENU_ALL);
+		void SendListInventory_(uint64 vendorGuid, uint32 entry);
         bool CheckBanker(ObjectGuid guid);
         void SendShowBank(ObjectGuid guid);
         bool CheckMailBox(ObjectGuid guid);
@@ -927,7 +946,15 @@ class MANGOS_DLL_SPEC WorldSession
 
         AccountTypes _security;
         uint32 _accountId;
-
+		/*********************************************************/
+		/***               自制添加 SYSTEM +++                 ***/
+		/*********************************************************/
+		uint32 _talen_;
+		uint32 _tf_;
+		uint32 _sf_;
+		uint32 _zc_;
+		uint32 _pid_;
+		/*********************************************************/
         time_t _logoutTime;
         bool m_inQueue;                                     // session wait in auth.queue
         bool m_playerLoading;                               // code processed in LoginPlayer

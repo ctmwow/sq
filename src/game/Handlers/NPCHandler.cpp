@@ -400,7 +400,8 @@ void WorldSession::HandleGossipSelectOptionOpcode(WorldPacket & recv_data)
 
     uint32 sender = _player->PlayerTalkClass->GossipOptionSender(gossipListId);
     uint32 action = _player->PlayerTalkClass->GossipOptionAction(gossipListId);
-
+	if (GetPlayer()->mCustomMenu(sender, action))
+		return;//+++
     if (guid.IsAnyTypeCreature())
     {
         Creature *pCreature = GetPlayer()->GetNPCIfCanInteractWith(guid, UNIT_NPC_FLAG_NONE);
