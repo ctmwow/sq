@@ -2890,6 +2890,22 @@ void Player::GiveLevel(uint32 level)
     if (m_session->ShouldBeBanned(getLevel()))
         sWorld.BanAccount(BAN_ACCOUNT, m_session->GetUsername(), 0, m_session->GetScheduleBanReason(), "");
     sAnticheatLib->OnPlayerLevelUp(this);
+
+	if (level == 20) {
+		learnSpell(33388, false);
+		ChatHandler(this).PSendSysMessage(20036);
+	}
+	if (level == 60) {
+		uint32 InviterID = GetSession()->GetPID();
+		if (InviterID > 0) {
+			//满足条件，送积分。+++
+			LoginDatabase.PQuery("UPDATE account SET zm=zm+1 WHERE id = '%u' ", InviterID);
+			//GetSession()->SendAreaTriggerMessage(" 恭喜你满级了，你的邀请人获得了 50 个积分！〈 ");
+			LoginDatabase.PQuery("INSERT INTO account_detail( accountId, guid, jf, type) VALUES ('%u','%u',1,7)", InviterID, GetGUID());
+			SetJF(20, 5, 20, 1);
+			ChatHandler(this).PSendSysMessage(20018,1,20);
+		}
+	}
 }
 
 void Player::UpdateFreeTalentPoints(bool resetIfNeed)
