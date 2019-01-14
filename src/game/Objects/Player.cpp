@@ -18025,6 +18025,7 @@ void Player::LeaveBattleground(bool teleportToEntryPoint)
                  GetGUIDLow(), GetSession()->GetAccountId(), GetSession()->GetRemoteAddress().c_str(),
                  bg->GetTypeID());
     }
+	setFactionForRace(getRace()); // reset faction
 }
 
 bool Player::CanJoinToBattleground() const
@@ -21600,19 +21601,19 @@ bool Player::mReadItem(uint32 id) {
 	}
 
 	if (id == 40100) {//订制变身
-		if (VipDisplayId == 0) {
-			QueryResult* result = CharacterDatabase.PQuery("SELECT display_id FROM character_setdisplayid  WHERE guid = '%u' ", GetGUID());
-			if (result) {
-				Field* fields = result->Fetch();
-				uint32 temp = fields[0].GetUInt32();
-				VipDisplayId = temp;
-			}
-			else {
-				VipDisplayId = 11048;
-			}
-			delete result;
-		}
-		DisplayId = VipDisplayId;
+		//if (VipDisplayId == 0) {
+		//	QueryResult* result = CharacterDatabase.PQuery("SELECT display_id FROM character_setdisplayid  WHERE guid = '%u' ", GetGUID());
+		//	if (result) {
+		//		Field* fields = result->Fetch();
+		//		uint32 temp = fields[0].GetUInt32();
+		//		VipDisplayId = temp;
+		//	}
+		//	else {
+		//		VipDisplayId = 11048;
+		//	}
+		//	delete result;
+		//}
+		DisplayId = 11048;
 		//SetDisplayId(DisplayId);
 		AddAura(5267);
 		//DisplayId = 0;

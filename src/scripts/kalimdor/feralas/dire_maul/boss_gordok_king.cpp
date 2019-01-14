@@ -98,13 +98,13 @@ struct boss_king_gordokAI : public ScriptedAI
             m_uiWarStomp_Timer -= uiDiff;
 
         // Berserker Charge
-        if (m_uiBerserkerCharge_Timer < uiDiff) 
-        {
-            if (DoCastSpellIfCan(m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 1, nullptr, SELECT_FLAG_PLAYER), SPELL_BERSERKER_CHARGE) == CAST_OK)
-                m_uiBerserkerCharge_Timer = urand(25000, 30000);
-        } 
-        else 
-            m_uiBerserkerCharge_Timer -= uiDiff;
+        //if (m_uiBerserkerCharge_Timer < uiDiff) 
+        //{
+        //    if (DoCastSpellIfCan(m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 1, nullptr, SELECT_FLAG_PLAYER), SPELL_BERSERKER_CHARGE) == CAST_OK)
+        //        m_uiBerserkerCharge_Timer = urand(25000, 30000);
+        //} 
+        //else 
+        //    m_uiBerserkerCharge_Timer -= uiDiff;
 
         DoMeleeAttackIfReady();
         
