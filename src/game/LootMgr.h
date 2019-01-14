@@ -105,7 +105,7 @@ struct LootStoreItem
         group(_group), needs_quest(_chanceOrQuestChance < 0), maxcount(_maxcount), conditionId(_conditionId)
          {}
 
-    bool Roll(bool rate) const;                                // Checks if the entry takes it's chance (at loot generation)
+	bool Roll(bool rate, uint32 cLevel, bool IsRaid) const;    // Checks if the entry takes it's chance (at loot generation)
     bool IsValid(LootStore const& store, uint32 entry) const;  // Checks correctness of values
     bool AllowedForTeam(Loot const& loot) const;               // Checks item group compatibility
 };
@@ -328,6 +328,9 @@ struct Loot
 
     void generateMoneyLoot(uint32 minAmount, uint32 maxAmount);
     bool FillLoot(uint32 loot_id, LootStore const& store, Player* loot_owner, bool personal, bool noEmptyError = false, WorldObject const* looted = NULL);
+
+	bool pIsRaid = false;
+	uint32 CreatureLevel = 60;
 
     // Inserts the item into the loot (called by LootTemplate processors)
     void AddItem(LootStoreItem const & item);

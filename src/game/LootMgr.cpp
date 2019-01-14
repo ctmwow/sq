@@ -261,19 +261,39 @@ void LootStore::ReportNotExistedId(uint32 id) const
 
 // Checks if the entry (quest, non-quest, reference) takes it's chance (at loot generation)
 // RATE_DROP_ITEMS is no longer used for all types of entries
-bool LootStoreItem::Roll(bool rate) const
+bool LootStoreItem::Roll(bool rate, uint32 cLevel, bool IsRaid) const
 {
-    if (chance >= 100.0f)
-        return true;
+	if (chance >= 100.0f)
+		return true;
+	float qualityModifier = 1.0f;
+	float Rates = 1.0f;
 
-    if (mincountOrRef < 0)                                  // reference case
-        return roll_chance_f(chance * (rate ? sWorld.getConfig(CONFIG_FLOAT_RATE_DROP_ITEM_REFERENCED) : 1.0f));
-
-    ItemPrototype const *pProto = ObjectMgr::GetItemPrototype(itemid);
-
-    float qualityModifier = pProto && rate ? sWorld.getConfig(qualityToRate[pProto->Quality]) : 1.0f;
-
-    return roll_chance_f(chance * qualityModifier);
+	if (mincountOrRef < 0) {                                  // reference case
+		if (!IsRaid && rate && cLevel > 0) {
+			Rates = sWorld.getConfig(CONFIG_FLOAT_RATE_DROP_ITEM_REFERENCED);
+			if (cLevel > 20) {
+				qualityModifier = Rates - ((cLevel - 20) * 0.1f);
+				qualityModifier = qualityModifier < 1.0f ? 1.0f : qualityModifier;
+			}
+			else {
+				qualityModifier = Rates;
+			}
+		}
+		//qualityModifier = 1000.0f;
+		return roll_chance_f(chance * qualityModifier);
+	}
+	ItemPrototype const *pProto = ObjectMgr::GetItemPrototype(itemid);
+	if (!IsRaid && rate && cLevel > 0 && pProto) {
+		Rates = sWorld.getConfig(qualityToRate[pProto->Quality]);
+		if (cLevel > 20) {
+			qualityModifier = Rates - ((cLevel - 20) * 0.1f);
+			qualityModifier = qualityModifier < 1.0f ? 1.0f : qualityModifier;
+		}
+		else {
+			qualityModifier = Rates;
+		}
+	}
+	return roll_chance_f(chance * qualityModifier);
 }
 
 // Checks correctness of values
@@ -496,6 +516,13 @@ bool Loot::FillLoot(uint32 loot_id, LootStore const& store, Player* loot_owner, 
     _personal = true;
     items.reserve(MAX_NR_LOOT_ITEMS);
     m_questItems.reserve(MAX_NR_QUEST_ITEMS);
+
+
+	pIsRaid = loot_owner->GetMap()->IsRaid();
+	if (looted)
+		CreatureLevel = looted->ToCreature()->getLevel();
+	else
+		CreatureLevel = 60;
 
     tab->Process(*this, store, store.IsRatesAllowed());     // Processing is done there, callback via Loot::AddItem()
 
@@ -1226,7 +1253,7 @@ void LootTemplate::Process(Loot& loot, LootStore const& store, bool rate, uint8 
     // Rolling non-grouped items
     for (LootStoreItemList::const_iterator i = Entries.begin() ; i != Entries.end() ; ++i)
     {
-        if (!i->Roll(rate))
+		if (!i->Roll(rate, loot.CreatureLevel, loot.pIsRaid))
             continue;                                       // Bad luck for the entry
 
         if (i->mincountOrRef < 0)                           // References processing
