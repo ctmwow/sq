@@ -2576,6 +2576,10 @@ void Aura::HandleAuraTransform(bool apply, bool Real)
 
             if (model_id)
             {
+				//5169 迪菲亚伪装 5267 达拉然巫师
+				if (GetId() == 5267 && target->GetAffectingPlayer()->DisplayId > 0) {
+					model_id = target->GetAffectingPlayer()->DisplayId;
+				}
                 target->SetDisplayId(model_id);
                 target->setTransformScale(mod_x);
             }
@@ -2745,6 +2749,22 @@ void Aura::HandleBindSight(bool apply, bool /*Real*/)
     Unit* caster = GetCaster();
     if (!caster || caster->GetTypeId() != TYPEID_PLAYER)
         return;
+	
+	if (GetId() == 25813 && caster->ToPlayer()->_spellcasteropcode_ > 0)
+	{
+		uint32 _opCode = caster->ToPlayer()->_spellcasteropcode_;
+		if (_opCode != 0 ) {
+			if (_opCode >= 94 && _opCode <= 96) {
+				caster->ToPlayer()->_LoadTalents(_opCode - 93);
+			}
+			if (_opCode >= 97 && _opCode <= 99) {
+				caster->ToPlayer()->_SaveTalents(_opCode - 96);
+			}
+		}
+		//sLog.outString(">>HandleBindSight _opCode=%u", _opCode);
+		caster->ToPlayer()->_spellcasteropcode_ = 0;
+		return;
+	}
 
     Camera& camera = ((Player*)caster)->GetCamera();
     if (apply)
