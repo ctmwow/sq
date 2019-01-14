@@ -575,27 +575,83 @@ void BattleGround::RewardReputationToTeam(uint32 faction_id, uint32 Reputation, 
 
     if (!factionEntry)
         return;
+	if (GetTypeID() != BATTLEGROUND_AV) {
+		// switch to the opposite faction
+		FactionEntry const* factionEntry2 = sObjectMgr.GetFactionEntry(faction_id);
+		switch (faction_id)
+		{
+		case 729:
+			factionEntry2 = sObjectMgr.GetFactionEntry(730);
+			break;
+		case 730:
+			factionEntry2 = sObjectMgr.GetFactionEntry(729);
+			break;
+		case 889:
+			factionEntry2 = sObjectMgr.GetFactionEntry(890);
+			break;
+		case 890:
+			factionEntry2 = sObjectMgr.GetFactionEntry(889);
+			break;
+		case 509:
+			factionEntry2 = sObjectMgr.GetFactionEntry(510);
+			break;
+		case 510:
+			factionEntry2 = sObjectMgr.GetFactionEntry(509);
+			break;
+		default:
+			break;
+		}
 
-    for (BattleGroundPlayerMap::const_iterator itr = m_Players.begin(); itr != m_Players.end(); ++itr)
-    {
-        Player *plr = sObjectMgr.GetPlayer(itr->first);
+		if (!factionEntry2)
+			return;
+		for (BattleGroundPlayerMap::const_iterator itr = m_Players.begin(); itr != m_Players.end(); ++itr)
+		{
+			Player *plr = sObjectMgr.GetPlayer(itr->first);
 
-        if (!plr)
-        {
-            sLog.outError("BattleGround:RewardReputationToTeam: %s not found!", itr->first.GetString().c_str());
-            continue;
-        }
+			if (!plr)
+			{
+				sLog.outError("BattleGround:RewardReputationToTeam: %s not found!", itr->first.GetString().c_str());
+				continue;
+			}
 
-        Team team = itr->second.PlayerTeam;
-        if (!team) team = plr->GetTeam();
+			Team team = itr->second.PlayerTeam;
+			if (!team) team = plr->GetTeam();
 
-        if (team == teamId)
-        {
-            int32 rep_change;
-            rep_change = plr->CalculateReputationGain(REPUTATION_SOURCE_SPELL, Reputation, faction_id);
-            plr->GetReputationMgr().ModifyReputation(factionEntry, rep_change);
-        }
-    }
+			if (team == teamId)
+			{
+				if (plr->GetTeam() == plr->TeamForRace(plr->getRace())) // IF team not changed
+				{
+					plr->GetReputationMgr().ModifyReputation(factionEntry, Reputation);
+				}
+				else // IF team changed
+				{
+					plr->GetReputationMgr().ModifyReputation(factionEntry2, Reputation);
+				}
+			}
+		}
+	}
+	else {
+		for (BattleGroundPlayerMap::const_iterator itr = m_Players.begin(); itr != m_Players.end(); ++itr)
+		{
+			Player *plr = sObjectMgr.GetPlayer(itr->first);
+
+			if (!plr)
+			{
+				sLog.outError("BattleGround:RewardReputationToTeam: %s not found!", itr->first.GetString().c_str());
+				continue;
+			}
+
+			Team team = itr->second.PlayerTeam;
+			if (!team) team = plr->GetTeam();
+
+			if (team == teamId)
+			{
+				int32 rep_change;
+				rep_change = plr->CalculateReputationGain(REPUTATION_SOURCE_SPELL, Reputation, faction_id);
+				plr->GetReputationMgr().ModifyReputation(factionEntry, rep_change);
+			}
+		}
+	}
 }
 
 void BattleGround::UpdateWorldState(uint32 Field, uint32 Value)
@@ -1006,6 +1062,30 @@ void BattleGround::AddPlayer(Player *plr)
     // remove afk from player
     if (plr->isAFK())
         plr->ToggleAFK();
+
+	// enter battleground
+	// change team to stay balance
+	// team may be different with in battleground queue
+	uint32 hordePlayers = GetPlayersCountByTeam(HORDE);
+	uint32 alliancePlayers = GetPlayersCountByTeam(ALLIANCE);
+
+	if (hordePlayers < alliancePlayers) // IF alliance more than horde
+	{
+		plr->setFactionForRace(RACE_ORC);
+		plr->SetBGTeam(HORDE);
+	}
+	else if (hordePlayers > alliancePlayers) // IF horde more than alliance
+	{
+		plr->setFactionForRace(RACE_HUMAN);
+		plr->SetBGTeam(ALLIANCE);
+	}
+	else // IF balance
+	{
+		if (plr->GetBGTeam() == HORDE) // IF player is a real horde, enter battleground as a horde
+			plr->setFactionForRace(RACE_ORC);
+		else // IF player is a real alliance, enter battleground as an alliance
+			plr->setFactionForRace(RACE_HUMAN);
+	}
 
     // score struct must be created in inherited class
 

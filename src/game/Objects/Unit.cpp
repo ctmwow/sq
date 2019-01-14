@@ -11937,6 +11937,9 @@ void Unit::InitPlayerDisplayIds()
 //计算伤害加成 npc > npc & player > player 正常伤害
 float Unit::CalculateDamageResult(Unit *pVictim, float bonus, uint32 spellProtoId)
 {
+	if (GetMap()->IsBattleGround())
+		return bonus;
+
 	float DamageBonus, DamageBonusTanke;
 	if (spellProtoId == 2) {
 		//反伤
