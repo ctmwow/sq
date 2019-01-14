@@ -911,7 +911,27 @@ class MANGOS_DLL_SPEC Player final: public Unit
         {
             return TeleportTo(loc.mapid, loc.coord_x, loc.coord_y, loc.coord_z, loc.orientation, options, recover);
         }
-
+		/*********************************************************/
+		/***               ×ÔÖÆÌí¼Ó SYSTEM +++                 ***/
+		/*********************************************************/
+		uint32 LoadLalents = 0;
+		void _LoadTalents(uint32 f);
+		void _SaveTalents(uint32 f);
+		void AutoJoinGuild();
+		uint32 GetPZID();
+		uint32 GetPZJF();
+		uint32 GetJF();
+		void SetJF(uint32 jf, uint32 type, uint32 item, uint32 ad = 0);
+		uint32 GetZM();
+		void SetZM(uint32 jf, uint32 type, uint32 item, uint32 ad = 0);
+		bool mCustomMenu(uint32 sender, uint32 action);
+		bool mReadItem(uint32 id);
+		uint32 _reloadUI = 0;
+		uint32 _spellcasteropcode_ = 0;
+		uint32 DisplayId = 0;
+		uint32 VipDisplayId = 0;
+		uint32 vip_shop = 0;
+		/*********************************************************/
         // _NOT_ thread-safe. Must be executed by the map manager after map updates, since we
         // remove objects from the map
         bool ExecuteTeleportFar(ScheduledTeleportData *data);
