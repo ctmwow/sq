@@ -1198,6 +1198,9 @@ class MANGOS_DLL_SPEC Unit : public WorldObject
         void CalculateMeleeDamage(Unit *pVictim, uint32 damage, CalcDamageInfo *damageInfo, WeaponAttackType attackType = BASE_ATTACK);
         void DealMeleeDamage(CalcDamageInfo *damageInfo, bool durabilityLoss);
 
+		float CalculateDamageResult(Unit *pVictim, float bonus, uint32 spellId);
+		void getMapBonus(float &DamageBonus, float &DamageBonusTanke);
+
         void CalculateSpellDamage(SpellNonMeleeDamage *damageInfo, int32 damage, SpellEntry const *spellInfo, WeaponAttackType attackType = BASE_ATTACK, Spell* spell = nullptr);
         void DealSpellDamage(SpellNonMeleeDamage *damageInfo, bool durabilityLoss);
 
