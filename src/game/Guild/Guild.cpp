@@ -590,7 +590,8 @@ void Guild::BroadcastToGuild(WorldSession *session, const std::string& msg, uint
     {
         WorldPacket data;
         ChatHandler::FillMessageData(&data, session, CHAT_MSG_GUILD, language, msg.c_str());
-
+		sWorld.SendGlobalMessage(&data);//公会世界聊天  世界聊天+++
+		return;
         for (MemberList::const_iterator itr = members.begin(); itr != members.end(); ++itr)
         {
             if (!HasRankRight(itr->second.RankId, GR_RIGHT_GCHATLISTEN))
