@@ -17725,6 +17725,10 @@ void Player::InitDataForForm(bool reapplyMods)
 // Return true is the bought item has a max count to force refresh of window by caller
 bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count, uint8 bag, uint8 slot)
 {
+	//远程买商品+++
+	if (uint64(vendorGuid) == GetGUID()) {
+		return BuyItemFromVendorByPlayer(vendorGuid, item, count, bag, slot);
+	}
     // cheating attempt
     if (count < 1) count = 1;
 
@@ -17896,6 +17900,138 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count, 
 		ChatHandler(this).PSendSysMessage(20017, JFprice, count, pProto->Name1);
 	}
     return crItem->maxcount != 0;
+}
+
+bool Player::BuyItemFromVendorByPlayer(ObjectGuid vendorGuid, uint32 item, uint8 count, uint8 bag, uint8 slot)
+{
+	//sLog.outString(">>BuyItemFromVendorByPlayer=%u item=%u", vendorGuid, item);
+	// cheating attempt
+	if (count < 1) count = 1;
+
+	if (!isAlive())
+		return false;
+
+	ItemPrototype const *pProto = ObjectMgr::GetItemPrototype(item);
+	if (!pProto)
+	{
+		SendBuyError(BUY_ERR_CANT_FIND_ITEM, NULL, item, 0);
+		return false;
+	}
+
+	VendorItemData const* vItems = sObjectMgr.GetNpcVendorItemList(vip_shop);
+	VendorItemData const* tItems = sObjectMgr.GetNpcVendorTemplateItemList(vip_shop);
+	if ((!vItems || vItems->Empty()) && (!tItems || tItems->Empty()))
+	{
+		SendBuyError(BUY_ERR_CANT_FIND_ITEM, NULL, item, 0);
+		return false;
+	}
+
+	uint32 vCount = vItems ? vItems->GetItemCount() : 0;
+	uint32 tCount = tItems ? tItems->GetItemCount() : 0;
+
+	size_t vendorslot = vItems ? vItems->FindItemSlot(item) : tItems ? tItems->FindItemSlot(item) : vCount;
+	if (vendorslot > vCount)
+		vendorslot = vCount + (tItems ? tItems->FindItemSlot(item) : tCount);
+
+	if (vendorslot >= vCount + tCount)
+	{
+		SendBuyError(BUY_ERR_CANT_FIND_ITEM, NULL, item, 0);
+		return false;
+	}
+
+	VendorItem const* crItem = vendorslot < vCount ? vItems->GetItem(vendorslot) : tItems->GetItem(vendorslot - vCount);
+	if (!crItem || crItem->item != item)                    // store diff item (cheating)
+	{
+		SendBuyError(BUY_ERR_CANT_FIND_ITEM, NULL, item, 0);
+		return false;
+	}
+
+	uint32 totalCount = pProto->BuyCount * count;
+
+	uint32 price = pProto->BuyPrice * count;
+
+	// reputation discount
+	price = uint32(floor(price * 1.0f));
+
+	if (GetMoney() < price)
+	{
+		SendBuyError(BUY_ERR_NOT_ENOUGHT_MONEY, NULL, item, 0);
+		return false;
+	}
+
+	//物品需要积分+++
+	uint32 JFprice = pProto->BuyIntegral * count;
+	if (JFprice > 0) {
+		uint32 jifen = GetJF();
+		if (jifen < JFprice) {
+			ChatHandler(this).PSendSysMessage(20016, pProto->Name1, pProto->BuyIntegral, count, JFprice, jifen);
+			return false;
+		}
+	}
+
+	Item* pItem = NULL;
+
+	if ((bag == NULL_BAG && slot == NULL_SLOT) || IsInventoryPos(bag, slot))
+	{
+		ItemPosCountVec dest;
+		InventoryResult msg = CanStoreNewItem(bag, slot, dest, item, totalCount);
+		if (msg != EQUIP_ERR_OK)
+		{
+			SendEquipError(msg, NULL, NULL, item);
+			return false;
+		}
+
+		LogModifyMoney(-int32(price), "BuyItem", vendorGuid, item);
+
+		pItem = StoreNewItem(dest, item, true);
+	}
+	else if (IsEquipmentPos(bag, slot))
+	{
+		if (totalCount != 1)
+		{
+			SendEquipError(EQUIP_ERR_ITEM_CANT_BE_EQUIPPED, NULL, NULL);
+			return false;
+		}
+
+		uint16 dest;
+		InventoryResult msg = CanEquipNewItem(slot, dest, item, false);
+		if (msg != EQUIP_ERR_OK)
+		{
+			SendEquipError(msg, NULL, NULL, item);
+			return false;
+		}
+
+		LogModifyMoney(-int32(price), "BuyItem", vendorGuid, item);
+
+		pItem = EquipNewItem(dest, item, true);
+
+		if (pItem)
+			AutoUnequipOffhandIfNeed();
+	}
+	else
+	{
+		SendEquipError(EQUIP_ERR_ITEM_DOESNT_GO_TO_SLOT, NULL, NULL);
+		return false;
+	}
+
+	if (!pItem)
+		return false;
+
+	WorldPacket data(SMSG_BUY_ITEM, 8 + 4 + 4 + 4);
+	data << GetObjectGuid();
+	data << uint32(vendorslot + 1);                 // numbered from 1 at client
+	data << uint32(0xFFFFFFFF);
+	data << uint32(count);
+	GetSession()->SendPacket(&data);
+
+	SendNewItem(pItem, totalCount, true, false, false);
+
+	//购买物品扣除积分+++
+	if (JFprice > 0) {
+		SetJF(JFprice, 3, pProto->ItemId);
+		ChatHandler(this).PSendSysMessage(20017, JFprice, count, pProto->Name1);
+	}
+	return crItem->maxcount != 0;
 }
 
 void Player::UpdateHomebindTime(uint32 time)
@@ -21237,4 +21373,349 @@ void Player::SetZM(uint32 jf, uint32 type, uint32 item, uint32 ad) {
 		LoginDatabase.PQuery("UPDATE account SET zm=zm-%u WHERE id = '%u' ", jf, GetSession()->GetAccountId());
 
 	LoginDatabase.PQuery("INSERT INTO account_detail( accountId, guid, jf, type, item) VALUES ( '%u', '%u', '%u', %u, %u)", GetSession()->GetAccountId(), GetGUID(), jf, type, item);
+}
+bool Player::mCustomMenu(uint32 sender, uint32 action) {
+	//sLog.outString(">>CustomMenu sender=%u action=%u", sender, action);
+	//sLog.outString(">>jf=%u talen=%u", GetJF(), GetSession()->GetTalen());
+	if (sender == 100000) {
+		if (isDead()) {
+			ChatHandler(this).PSendSysMessage(20020);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		}
+		if (IsTaxiFlying()) {
+			ChatHandler(this).PSendSysMessage(20021);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		}
+		uint32 NeedPoints = 1000000;
+		switch (action)
+		{
+		case 10001:
+			ChatHandler(this).PSendSysMessage(20019);
+			vip_shop = 90001;
+			GetSession()->SendListInventory_(GetGUID(), vip_shop);
+			return true;
+		case 10000://积分商店
+			ChatHandler(this).PSendSysMessage(20019);
+			vip_shop = 90000;
+			GetSession()->SendListInventory_(GetGUID(), vip_shop);
+			return true;
+		case 200://积分充值
+			ChatHandler(this).PSendSysMessage(20000);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		case 401://双天赋
+			if (GetSession()->GetTF() == 1) {
+				ChatHandler(this).PSendSysMessage(20008);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			NeedPoints = 500;
+			if (GetJF() < NeedPoints) {
+				ChatHandler(this).PSendSysMessage(20004, NeedPoints);
+				ChatHandler(this).PSendSysMessage(20000);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			GetSession()->SetTF(1);
+			SetJF(NeedPoints, 3, NeedPoints);
+			ChatHandler(this).PSendSysMessage(20005, NeedPoints, " 天赋 ");
+			LoginDatabase.PQuery("UPDATE account SET tf=1 WHERE id = '%u' ", GetSession()->GetAccountId());
+			CLOSE_GOSSIP_MENU();
+			return true;
+		case 402://鸟点瞬飞
+			if (GetSession()->GetSF() == 1) {
+				ChatHandler(this).PSendSysMessage(20009);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			NeedPoints = 300;
+			if (GetJF() < NeedPoints) {
+				ChatHandler(this).PSendSysMessage(20004, NeedPoints);
+				ChatHandler(this).PSendSysMessage(20000);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			GetSession()->SetSF(1);
+			SetJF(NeedPoints, 3, NeedPoints);
+			ChatHandler(this).PSendSysMessage(20005, NeedPoints, " 瞬飞 ");
+			LoginDatabase.PQuery("UPDATE account SET sf=1 WHERE id = '%u' ", GetSession()->GetAccountId());
+			CLOSE_GOSSIP_MENU();
+			return true;
+		case 50506://战友招募
+			ChatHandler(this).PSendSysMessage(20888, GetPZID(), GetZM());
+			break;
+		case 50504://积分管理
+			ChatHandler(this).PSendSysMessage(20887, GetJF());
+			break;
+		case 601://招募点兑换积分
+			if (GetZM() < 1) {
+				ChatHandler(this).PSendSysMessage(20032);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			SetJF(50, 0, 50, 1);
+			SetZM(1, 8, 0, 0);
+			ChatHandler(this).PSendSysMessage(20033);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		case 501://奥山排队
+			if (!GetBGAccessByLevel(BattleGroundTypeId(1))) {
+				ChatHandler(this).PSendSysMessage(20001);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			GetSession()->SendBattlegGroundList(uint64(0), BattleGroundTypeId(1));
+			return true;
+		case 502://战歌排队
+			if (!GetBGAccessByLevel(BattleGroundTypeId(2))) {
+				ChatHandler(this).PSendSysMessage(20001);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			GetSession()->SendBattlegGroundList(uint64(0), BattleGroundTypeId(2));
+			return true;
+		case 503://阿拉希排队
+			if (!GetBGAccessByLevel(BattleGroundTypeId(3))) {
+				ChatHandler(this).PSendSysMessage(20001);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			GetSession()->SendBattlegGroundList(uint64(0), BattleGroundTypeId(3));
+			return true;
+		case 603://兑换蛋糕
+			if (GetZM() < 5) {
+				ChatHandler(this).PSendSysMessage(20032);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			AddItem(90001, 1);
+			SetZM(5, 8, 0, 0);
+			ChatHandler(this).PSendSysMessage(20033);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		case 1000:
+			ChatHandler(this).PSendSysMessage(21000);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		case 666:
+			return true;
+		default:
+			if (action == 888) {
+				//新手BUFF
+				if (getLevel() > 59) {
+					ChatHandler(this).PSendSysMessage(20038);
+					CLOSE_GOSSIP_MENU();
+					return true;
+				}
+				uint32 RaceClass = getRace();
+				if (RaceClass == 1 || RaceClass == 3 || RaceClass == 4 || RaceClass == 7) {
+					AddAura(21850);//野性赐福
+				}
+				if (RaceClass == 2 || RaceClass == 5 || RaceClass == 6 || RaceClass == 8) {
+					AddAura(21850);//野性赐福
+					AddAura(16609);//酋长祝福
+					AddAura(24425);//赞达拉之魂
+				}
+				ChatHandler(this).PSendSysMessage(20039);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			if (action >= 94 && action <= 99) {
+				if (GetSession()->GetTF() != 1) {
+					ChatHandler(this).PSendSysMessage(20007);
+					CLOSE_GOSSIP_MENU();
+					return true;
+				}
+				if (isInCombat()) {
+					ChatHandler(this).PSendSysMessage(20022);
+					CLOSE_GOSSIP_MENU();
+					return true;
+				}
+				if (GetMapId() > 1) {
+					ChatHandler(this).PSendSysMessage(20037);
+					CLOSE_GOSSIP_MENU();
+					return true;
+				}
+				//sLog.outString(">>teleport action=%u",  action);
+				_spellcasteropcode_ = action;
+				if (action >= 97) {
+					GetSession()->GetMasterPlayer()->SaveActions();
+				}
+
+				CastSpell(this, 4981, false);
+				//SendPacketsAtRelogin();
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			break;
+		}
+		if (action == 10999) {
+			//测试专用
+			Item* item;
+			if (getClass() == 1) {
+				item = Item::CreateItem(18876, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (15 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				item = Item::CreateItem(16477, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (4 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				item = Item::CreateItem(16478, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (0 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				item = Item::CreateItem(16479, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (6 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				item = Item::CreateItem(16480, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (2 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				item = Item::CreateItem(16483, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (7 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				item = Item::CreateItem(16484, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (9 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+
+
+
+				//item = Item::CreateItem(18877, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (15 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				//item = Item::CreateItem(16541, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (4 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				//item = Item::CreateItem(16542, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (0 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				//item = Item::CreateItem(16543, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (6 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				//item = Item::CreateItem(16544, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (2 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				//item = Item::CreateItem(16545, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (7 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				//item = Item::CreateItem(16548, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (9 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+			}
+
+			CLOSE_GOSSIP_MENU();
+			return true;
+		}
+		//sLog.outString(">>RAID %u", GetMap()->IsRaid());
+
+		PlayerTalkClass->ClearMenus();
+		PlayerTalkClass->GetGossipMenu().AddGossipMenuId(action);
+		PlayerTalkClass->SendGossipMenu(1, GetGUID());
+
+		return true;
+	}
+	return false;
+}
+bool Player::mReadItem(uint32 id) {
+	//sLog.outString(">>mReadItem id=%u", id);
+	if (id == 90000 || id == 100000) {
+		PlayerTalkClass->ClearMenus();
+		PlayerTalkClass->GetGossipMenu().AddGossipMenuId(50500);
+		PlayerTalkClass->SendGossipMenu(1, GetGUID());
+		return true;
+	}
+	if (id == 50000) {//阅读物品，升一级
+		if (getLevel() > 19) {
+			ChatHandler(this).PSendSysMessage(10014);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		}
+		SetMoney(GetMoney() + 10000);//送1J
+		GiveLevel((getLevel() + 1));//等级+1
+		DestroyItemCount(id, 1, true);//删除指定材料
+		return true;
+	}
+	if (id == 50001) {//阅读物品，升一级
+		if (getLevel() > 39) {
+			ChatHandler(this).PSendSysMessage(10014);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		}
+		SetMoney(GetMoney() + 20000);//送2J
+		GiveLevel((getLevel() + 1));//等级+1
+		DestroyItemCount(id, 1, true);//删除指定材料
+		return true;
+	}
+	if (id == 50002) {//阅读物品，升一级
+		if (getLevel() > 57) {
+			ChatHandler(this).PSendSysMessage(10014);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		}
+		SetMoney(GetMoney() + 30000);//送3J
+		GiveLevel((getLevel() + 1));//等级+1
+		DestroyItemCount(id, 1, true);//删除指定材料
+		return true;
+	}
+	if (id == 50501) {//满级之书
+		if (getLevel() >= 60) {
+			ChatHandler(this).PSendSysMessage(10014);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		}
+		GiveLevel(60);
+		SetMoney(GetMoney() + 1500000);//送150J
+		//LearnSpell(33388, false);//赠送初级骑术
+		UpdateSkillsToMaxSkillsForLevel();//maxskill'
+		DestroyItemCount(50501, 1, true);//删除指定材料
+		return true;
+	}
+
+	if (id == 40100) {//订制变身
+		if (VipDisplayId == 0) {
+			QueryResult* result = CharacterDatabase.PQuery("SELECT display_id FROM character_setdisplayid  WHERE guid = '%u' ", GetGUID());
+			if (result) {
+				Field* fields = result->Fetch();
+				uint32 temp = fields[0].GetUInt32();
+				VipDisplayId = temp;
+			}
+			else {
+				VipDisplayId = 11048;
+			}
+			delete result;
+		}
+		DisplayId = VipDisplayId;
+		//SetDisplayId(DisplayId);
+		AddAura(5267);
+		DisplayId = 0;
+		return true;
+	}
+	switch (id) {
+	case 40105://随缘变身
+	{
+		//DisplayId = sWorld.getConfig(CONFIG_UINT32_VALUE_MORPH);
+		AddAura(5267);
+		DisplayId = 0;
+		return true;
+	}
+	case 40101://变身-燃烧的胸毛
+	{
+		DisplayId = 15688;
+		AddAura(5267);
+		DisplayId = 0;
+		return true;
+	}
+	case 40102://变身-戈多克大王
+	{
+		DisplayId = 11583;
+		AddAura(5267);
+		DisplayId = 0;
+		return true;
+	}
+	case 40103://变身-美味风蛇
+	{
+		DisplayId = 4618;
+		AddAura(5267);
+		DisplayId = 0;
+		return true;
+	}
+	case 40104://变身-骷髅
+	{
+		DisplayId = 7550;
+		AddAura(5267);
+		DisplayId = 0;
+		return true;
+	}
+	default:
+	{
+		//CastSpell(this, 8213, false);
+	}
+	}
+
+	return false;
 }
