@@ -1884,7 +1884,7 @@ bool Player::TeleportTo(uint32 mapid, float x, float y, float z, float orientati
         m_movementInfo.RemoveMovementFlag(MOVEFLAG_ONTRANSPORT);
 
     // Near teleport, let it happen immediately since we remain in the same map
-    if ((GetMapId() == mapid) && (!m_transport) && !(options & TELE_TO_FORCE_MAP_CHANGE))
+    if ((GetMapId() == mapid) && (!m_transport) && !(options & TELE_TO_FORCE_MAP_CHANGE) && _reloadUI == 0)
     {
         //lets reset far teleport flag if it wasn't reset during chained teleports
         SetSemaphoreTeleportFar(false);
@@ -21246,6 +21246,83 @@ void Player::AutoJoinGuild() {
 	if (targetGuild)
 		targetGuild->AddMember(GetGUIDLow(), 4);
 }
+void Player::_LoadTalents(uint32 f)
+{
+	sLog.outString(">>_LoadTalents f=%u %s", f, GetName());
+	//重置天赋
+	//读取之前保存的天赋技能
+	QueryResult *result = CharacterDatabase.PQuery("SELECT spell,active,disabled FROM character_spell_talent WHERE guid = '%u' && flag = '%u'", GetGUIDLow(), f);
+	if (result)
+	{
+		resetTalents(true);
+		do
+		{
+			Field *fields = result->Fetch();
+			uint32 spellId = fields[0].GetUInt32();
+			if (!HasSpell(spellId) && GetTalentSpellCost(spellId) > 0)
+				learnSpell(spellId, false); //添加天赋技能
+
+		} while (result->NextRow());
+		delete result;
+		result = CharacterDatabase.PQuery("SELECT button,action,type FROM character_spell_action WHERE guid = '%u' && '%u'", GetGUIDLow(), f);
+		GetSession()->GetMasterPlayer()->LoadActions(result);
+		delete result;
+		GetSession()->GetMasterPlayer()->SendInitialActionButtons();
+		if (GetMapId() <= 1) {
+			_reloadUI = 1;
+			TeleportTo(GetMapId(), GetPositionX(), GetPositionY(), GetPositionZ(), GetOrientation());
+			_reloadUI = 0;
+		}
+		GetSession()->GetMasterPlayer()->SaveActions();
+		ChatHandler(this).PSendSysMessage(20002, f);
+	}
+	else {
+		ChatHandler(this).PSendSysMessage(20040, f);
+		delete result;
+	}
+}
+void Player::_SaveTalents(uint32 f)
+{
+	sLog.outString(">>_SaveTalents f=%u %s", f, GetName());
+	if (GetFreeTalentPoints() > 0) {
+		ChatHandler(this).PSendSysMessage(20041, f);
+		return;
+	}
+	//GetSession()->GetMasterPlayer()->SaveActions();
+	SqlStatementID insSpells;
+	uint32 GUID = GetGUIDLow();
+	CharacterDatabase.PQuery("DELETE FROM character_spell_talent WHERE guid = '%u' && flag='%u'", GetGUIDLow(), f);
+	
+	SqlStatement stmtIns = CharacterDatabase.CreateStatement(insSpells, "INSERT INTO character_spell_talent (guid,spell,active,disabled,flag) VALUES (?, ?, ?, ?, ?)");
+
+	for (PlayerSpellMap::iterator itr = m_spells.begin(), next = m_spells.begin(); itr != m_spells.end();)
+	{
+
+		// add only changed/new not dependent spells
+		if (!itr->second.dependent && (itr->second.state == PLAYERSPELL_NEW || itr->second.state == PLAYERSPELL_CHANGED)) {
+
+		}
+
+		if (GetTalentSpellCost(itr->first) > 0 && !itr->second.disabled) {
+			//sLog.outString(">>_SaveSpells_Temp id=%u", itr->first);
+			stmtIns.PExecute(GUID, itr->first, uint8(itr->second.active ? 1 : 0), 0, f);
+		}
+
+		if (itr->second.state == PLAYERSPELL_REMOVED)
+			m_spells.erase(itr++);
+		else
+		{
+			itr->second.state = PLAYERSPELL_UNCHANGED;
+			++itr;
+		}
+
+	}
+	//取出action 保存到 spell_action
+	
+	CharacterDatabase.PQuery("DELETE FROM character_spell_action WHERE guid = '%u' and flag='%u'", GetGUIDLow(), f);
+	CharacterDatabase.PQuery("INSERT INTO character_spell_action (guid,button,action,type,flag) SELECT guid,button,action,type,'%u' FROM character_action where guid = '%u'", f, GetGUIDLow());
+	ChatHandler(this).PSendSysMessage(20003,f);
+}
 bool Player::mCustomMenu(uint32 sender, uint32 action) {
 	//sLog.outString(">>CustomMenu sender=%u action=%u", sender, action);
 	//sLog.outString(">>jf=%u talen=%u", GetJF(), GetSession()->GetTalen());
@@ -21407,8 +21484,6 @@ bool Player::mCustomMenu(uint32 sender, uint32 action) {
 				}
 				if (GetMapId() > 1) {
 					ChatHandler(this).PSendSysMessage(20037);
-					CLOSE_GOSSIP_MENU();
-					return true;
 				}
 				//sLog.outString(">>teleport action=%u",  action);
 				_spellcasteropcode_ = action;
@@ -21416,7 +21491,7 @@ bool Player::mCustomMenu(uint32 sender, uint32 action) {
 					GetSession()->GetMasterPlayer()->SaveActions();
 				}
 
-				CastSpell(this, 4981, false);
+				CastSpell(this, 25813, false);
 				//SendPacketsAtRelogin();
 				CLOSE_GOSSIP_MENU();
 				return true;
@@ -21484,7 +21559,6 @@ bool Player::mReadItem(uint32 id) {
 	if (id == 50000) {//阅读物品，升一级
 		if (getLevel() > 19) {
 			ChatHandler(this).PSendSysMessage(10014);
-			CLOSE_GOSSIP_MENU();
 			return true;
 		}
 		SetMoney(GetMoney() + 10000);//送1J
@@ -21495,7 +21569,6 @@ bool Player::mReadItem(uint32 id) {
 	if (id == 50001) {//阅读物品，升一级
 		if (getLevel() > 39) {
 			ChatHandler(this).PSendSysMessage(10014);
-			CLOSE_GOSSIP_MENU();
 			return true;
 		}
 		SetMoney(GetMoney() + 20000);//送2J
@@ -21506,7 +21579,6 @@ bool Player::mReadItem(uint32 id) {
 	if (id == 50002) {//阅读物品，升一级
 		if (getLevel() > 57) {
 			ChatHandler(this).PSendSysMessage(10014);
-			CLOSE_GOSSIP_MENU();
 			return true;
 		}
 		SetMoney(GetMoney() + 30000);//送3J
@@ -21517,7 +21589,6 @@ bool Player::mReadItem(uint32 id) {
 	if (id == 50501) {//满级之书
 		if (getLevel() >= 60) {
 			ChatHandler(this).PSendSysMessage(10014);
-			CLOSE_GOSSIP_MENU();
 			return true;
 		}
 		GiveLevel(60);
@@ -21544,44 +21615,101 @@ bool Player::mReadItem(uint32 id) {
 		DisplayId = VipDisplayId;
 		//SetDisplayId(DisplayId);
 		AddAura(5267);
-		DisplayId = 0;
+		//DisplayId = 0;
 		return true;
 	}
 	switch (id) {
 	case 40105://随缘变身
 	{
 		//DisplayId = sWorld.getConfig(CONFIG_UINT32_VALUE_MORPH);
+		switch (urand(1, 12))
+		{
+		case 0:
+			DisplayId = 0;
+			break;
+		case 1:
+			DisplayId = 6945;
+			break;
+		case 2:
+			DisplayId = 6956;
+			break;
+		case 3:
+			DisplayId = 6948;
+			break;
+		case 4:
+			DisplayId = 10480;
+			break;
+		case 5:
+			DisplayId = 4618;
+			break;
+		case 6:
+			DisplayId = 7550;
+			break;
+		case 7:
+			DisplayId = 3494;
+			break;
+		case 8:
+			DisplayId = 7113;
+			break;
+		case 9:
+			DisplayId = 4873;
+			break;
+		case 10:
+			DisplayId = 10478;
+			break;
+		case 11:
+			DisplayId = 10479;
+			break;
+		case 12:
+			DisplayId = 10481;
+			break;
+		case 13:
+			DisplayId = 0;
+			break;
+		case 14:
+			DisplayId = 0;
+			break;
+		case 15:
+			DisplayId = 0;
+			break;
+		case 16:
+			DisplayId = 0;
+			break;
+		case 17:
+			DisplayId = 0;
+			break;
+		}
 		AddAura(5267);
-		DisplayId = 0;
-		return true;
+		//DisplayId = 0;
+		return false;
 	}
 	case 40101://变身-燃烧的胸毛
 	{
 		DisplayId = 15688;
 		AddAura(5267);
-		DisplayId = 0;
-		return true;
+		//DisplayId = 0;
+		return false;
 	}
 	case 40102://变身-戈多克大王
 	{
-		DisplayId = 11583;
+		DisplayId = 11550;
 		AddAura(5267);
-		DisplayId = 0;
-		return true;
+		//DisplayId = 0;
+		return false;
 	}
 	case 40103://变身-美味风蛇
 	{
 		DisplayId = 4618;
 		AddAura(5267);
-		DisplayId = 0;
-		return true;
+		//DisplayId = 0;
+		return false;
 	}
 	case 40104://变身-骷髅
 	{
 		DisplayId = 7550;
 		AddAura(5267);
-		DisplayId = 0;
-		return true;
+		//DisplayId = 0;
+		return false;
 	}
 	default:
 	{

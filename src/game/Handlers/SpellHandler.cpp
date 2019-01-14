@@ -67,6 +67,18 @@ void WorldSession::HandleUseItemOpcode(WorldPacket& recvPacket)
         return;
     }
 
+	if (_player->mReadItem(proto->ItemId)) {
+		//if (pItem->GetProto()->Bonding == BIND_WHEN_USE || pItem->GetProto()->Bonding == BIND_WHEN_PICKED_UP || pItem->GetProto()->Bonding == BIND_QUEST_ITEM)
+		//{
+		//	if (!pItem->IsSoulBound())
+		//	{
+		//		pItem->SetState(ITEM_CHANGED, pUser);
+		//		pItem->SetBinding(true);
+		//	}
+		//}
+		return;//+++
+	}
+
     // some item classes can be used only in equipped state
     if (proto->InventoryType != INVTYPE_NON_EQUIP && !pItem->IsEquipped())
     {

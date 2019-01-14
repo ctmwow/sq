@@ -755,6 +755,12 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder *holder)
         //for (int i = 0; i < MAX_MOVE_TYPE; ++i)
             //GetWarden()->SendSpeedChange(UnitMoveType(i), pCurrChar->GetSpeed(UnitMoveType(i)));
 
+	if (pCurrChar->HasAura(5267)) {
+		pCurrChar->RemoveAurasDueToSpell(5267);
+	}
+	if (pCurrChar->HasAura(20178)) {
+		pCurrChar->RemoveAurasDueToSpell(20178);
+	}
     ALL_SESSION_SCRIPTS(this, OnLogin(pCurrChar));
 }
 
