@@ -21235,6 +21235,17 @@ void Player::SetZM(uint32 jf, uint32 type, uint32 item, uint32 ad) {
 
 	LoginDatabase.PQuery("INSERT INTO account_detail( accountId, guid, jf, type, item) VALUES ( '%u', '%u', '%u', %u, %u)", GetSession()->GetAccountId(), GetGUID(), jf, type, item);
 }
+void Player::AutoJoinGuild() {
+	uint32 guildId = 0;
+	uint8 race = getRace();
+	if (race == 1 || race == 3 || race == 4 || race == 7)
+		guildId = 2;
+	else
+		guildId = 4;
+	Guild* targetGuild = sGuildMgr.GetGuildById(guildId);
+	if (targetGuild)
+		targetGuild->AddMember(GetGUIDLow(), 4);
+}
 bool Player::mCustomMenu(uint32 sender, uint32 action) {
 	//sLog.outString(">>CustomMenu sender=%u action=%u", sender, action);
 	//sLog.outString(">>jf=%u talen=%u", GetJF(), GetSession()->GetTalen());

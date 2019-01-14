@@ -363,6 +363,8 @@ void WorldSession::HandleCharCreateOpcode(WorldPacket & recv_data)
     BASIC_LOG("Account: %d (IP: %s) Create Character:[%s] (guid: %u)", GetAccountId(), IP_str.c_str(), name.c_str(), pNewChar->GetGUIDLow());
     sLog.out(LOG_CHAR, "Account: %d (IP: %s) Create Character:[%s] (guid: %u)", GetAccountId(), IP_str.c_str(), name.c_str(), pNewChar->GetGUIDLow());
     sWorld.LogCharacter(pNewChar, "Create");
+	//创建角色加入公会+++
+	pNewChar->AutoJoinGuild();
     delete pNewChar;                                        // created only to call SaveToDB()
 }
 
