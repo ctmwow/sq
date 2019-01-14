@@ -2115,7 +2115,7 @@ void Unit::DealMeleeDamage(CalcDamageInfo *damageInfo, bool durabilityLoss)
                     }
                 }
                 damage *= DoneTotalMod;
-
+				damage = CalculateDamageResult(pVictim, damage, 2);//反伤
                 // apply SpellBaseDamageBonusTaken for mobs only
                 // for example, Death Talon Seethers with Aura of Flames reflect 1200 damage to tanks with Mark of Flame
                 if (pVictim->GetTypeId() == TYPEID_UNIT)
@@ -6542,7 +6542,7 @@ uint32 Unit::SpellDamageBonusDone(Unit *pVictim, SpellEntry const *spellProto, u
 
     // Add pct bonus from spell damage versus
     DoneTotalMod *= GetTotalAuraMultiplierByMiscMask(SPELL_AURA_MOD_DAMAGE_DONE_VERSUS, creatureTypeMask);
-
+	DoneTotalMod = CalculateDamageResult(pVictim, DoneTotalMod, spellProto->Id);//魔法伤害
     // Add flat bonus from spell damage creature
     DoneTotal += GetTotalAuraModifierByMiscMask(SPELL_AURA_MOD_DAMAGE_DONE_CREATURE, creatureTypeMask);
 
@@ -7208,7 +7208,7 @@ uint32 Unit::MeleeDamageBonusDone(Unit* pVictim, uint32 pdamage, WeaponAttackTyp
 
     // ..done pct (by creature type mask)
     DonePercent *= GetTotalAuraMultiplierByMiscMask(SPELL_AURA_MOD_DAMAGE_DONE_VERSUS, creatureTypeMask);
-
+	DonePercent = CalculateDamageResult(pVictim, DonePercent, 0);//物理伤害
     // special dummys/class scripts and other effects
     // =============================================
     Unit *owner = GetOwner();
@@ -7266,7 +7266,10 @@ uint32 Unit::MeleeDamageBonusDone(Unit* pVictim, uint32 pdamage, WeaponAttackTyp
         if (Player* modOwner = GetSpellModOwner())
             modOwner->ApplySpellMod(spellProto->Id, damagetype == DOT ? SPELLMOD_DOT : SPELLMOD_DAMAGE, tmpDamage, spell);
     }
-
+	//造成物理伤害，如果存在清算则删除+++
+	if (HasAura(20178)) {
+		RemoveAurasDueToSpell(20178);
+	}
     // bonus result can be negative
     return tmpDamage > 0 ? uint32(tmpDamage) : 0;
 }
@@ -11929,4 +11932,122 @@ void Unit::InitPlayerDisplayIds()
             return;
     }
 
+}
+
+//计算伤害加成 npc > npc & player > player 正常伤害
+float Unit::CalculateDamageResult(Unit *pVictim, float bonus, uint32 spellProtoId)
+{
+	float DamageBonus, DamageBonusTanke;
+	if (spellProtoId == 2) {
+		//反伤
+		if (GetTypeId() != TYPEID_PLAYER && !GetOwnerGuid().IsPlayer()) {
+			if (pVictim->GetTypeId() == TYPEID_PLAYER || pVictim->GetOwnerGuid().IsPlayer()) {
+				getMapBonus(DamageBonus, DamageBonusTanke);
+				bonus = bonus * DamageBonus;
+			}
+		}
+		return bonus;
+	}
+	if (GetTypeId() == TYPEID_PLAYER || GetOwnerGuid().IsPlayer()) {
+		//攻击者=玩家 目标=NPC 增加伤害
+		if (pVictim->GetTypeId() != TYPEID_PLAYER && !pVictim->GetOwnerGuid().IsPlayer()) {
+			getMapBonus(DamageBonus, DamageBonusTanke);
+			if (spellProtoId > 0) {
+				//防止技能重复加倍伤害
+				uint32 _spellId_[] = {
+					//愤怒之锤
+					24275,24274,24239,
+					//正义圣印
+					20293,20292,20291,20290,20289,20288,20287,21084 ,
+					//命令审判
+					20424,20467,20963,20964,20965,20966 ,
+					//命令圣印
+					23075,20915,20918,20919,20920,
+					//剑刃乱舞
+					22482,
+					//横扫攻击
+					12723
+				};
+				uint32* Result;
+				Result = std::find(_spellId_, _spellId_ + 23, spellProtoId);
+				if (Result == _spellId_ + 23) {
+					bonus = bonus + (DamageBonus - 1.00f);
+				}
+			}
+			else {
+				bonus = bonus + (DamageBonus - 1.00f);
+			}
+			//sLog.outString("bonus=%f , raidBonus=%f", bonus, raidBonus);
+		}
+	}
+	else {
+		//攻击者=NPC 目标=玩家 减少伤害
+		if (pVictim->GetTypeId() == TYPEID_PLAYER || ((Creature*)pVictim)->GetOwnerGuid().IsPlayer()) {
+			getMapBonus(DamageBonus, DamageBonusTanke);
+			bonus = bonus - DamageBonusTanke;
+			//sLog.outString("bonus=%f , raidBonus=%f", bonus, raidBonus);
+		}
+	}
+	return bonus;
+}
+void Unit::getMapBonus(float &DamageBonus, float &DamageBonusTanke) {
+	uint32 mapId = GetMapId();
+	uint32 pCount = 0;
+	switch (mapId)
+	{
+	case 249://奥妮克希亚的巢穴
+		pCount = GetMap()->GetPlayersCountExceptGMs();
+		if (pCount > 20) {
+			DamageBonus = ((40 - pCount) * 0.05) + 1.0f;
+			DamageBonusTanke = (40 - pCount) * 0.025;
+		}
+		else {
+			DamageBonus = (pCount * 0.05) + 1.0f;
+			DamageBonusTanke = pCount * 0.025;
+		}
+		break;
+	case 409://mc
+		pCount = GetMap()->GetPlayersCountExceptGMs();
+		if (pCount > 20) {
+			DamageBonus = ((40 - pCount) * 0.05) + 1.0f;
+			DamageBonusTanke = (40 - pCount) * 0.025;
+		}
+		else {
+			DamageBonus = (pCount * 0.05) + 1.0f;
+			DamageBonusTanke = pCount * 0.025;
+		}
+		break;
+	case 469://bwl
+		DamageBonus = 1.00f;
+		DamageBonusTanke = -10.00f;
+		break;
+	case 309://ZG
+		pCount = GetMap()->GetPlayersCountExceptGMs();
+		if (pCount > 10) {
+			DamageBonus = ((20 - pCount) * 0.10f) + 1.0f;
+			DamageBonusTanke = (20 - pCount) * 0.05f;
+		}
+		else {
+			DamageBonus = (pCount * 0.10f) + 1.0f;
+			DamageBonusTanke = pCount * 0.05f;
+		}
+		break;
+	case 509://FX
+		DamageBonus = 0.10f;
+		DamageBonusTanke = -10.00f;
+		break;
+	case 531://TAQ
+		DamageBonus = 0.10f;
+		DamageBonusTanke = -10.00f;
+		break;
+	case 533://NAXX
+		DamageBonus = 0.10f;
+		DamageBonusTanke = -10.50f;
+		break;
+	default:
+		//全局默认
+		DamageBonus = 2.0f;
+		DamageBonusTanke = 0.50f;
+		return; //退出
+	}
 }
