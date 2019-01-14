@@ -17667,6 +17667,16 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count, 
         return false;
     }
 
+	//物品需要积分+++
+	uint32 JFprice = pProto->BuyIntegral * count;
+	if (JFprice > 0) {
+		uint32 jifen = GetJF();
+		if (jifen < JFprice) {
+			ChatHandler(this).PSendSysMessage(20016, pProto->Name1, pProto->BuyIntegral, count, JFprice, jifen);
+			return false;
+		}
+	}
+
     Item* pItem = NULL;
 
     if ((bag == NULL_BAG && slot == NULL_SLOT) || IsInventoryPos(bag, slot))
@@ -17725,7 +17735,11 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count, 
     GetSession()->SendPacket(&data);
 
     SendNewItem(pItem, totalCount, true, false, false);
-
+	//购买物品扣除积分+++
+	if (JFprice > 0) {
+		SetJF(JFprice, 3, pProto->ItemId);
+		ChatHandler(this).PSendSysMessage(20017, JFprice, count, pProto->Name1);
+	}
     return crItem->maxcount != 0;
 }
 
@@ -21005,4 +21019,67 @@ void Player::CreatePacketBroadcaster()
     // Register player packet queue with the packet broadcaster
     m_broadcaster = std::make_shared<PlayerBroadcaster>(m_session->GetSocket(), GetObjectGuid());
     sWorld.GetBroadcaster()->RegisterPlayer(m_broadcaster);
+}
+
+/*********************************************************/
+/***               自制添加 SYSTEM +++                 ***/
+/*********************************************************/
+uint32 Player::GetPZID() {
+	QueryResult* result = LoginDatabase.PQuery("SELECT id FROM account  WHERE pid = '%u' ", GetSession()->GetAccountId());
+	if (!result) {
+		delete result;
+		return 0;
+	}
+	uint32 temp = result->GetRowCount();
+	delete result;
+	return temp;
+}
+uint32 Player::GetPZJF() {
+	QueryResult* result = LoginDatabase.PQuery("SELECT sum(jf) FROM account_detail  WHERE accountId = '%u' && type=2 ", GetSession()->GetAccountId());
+	if (!result) {
+		delete result;
+		return 0;
+	}
+
+	Field* fields = result->Fetch();
+	uint32 temp = fields[0].GetUInt32();
+	delete result;
+	return temp;
+}
+uint32 Player::GetJF() {
+	QueryResult* result = LoginDatabase.PQuery("SELECT jf FROM account  WHERE id = '%u' ", GetSession()->GetAccountId());
+	if (!result) {
+		delete result;
+		return 0;
+	}
+	Field* fields = result->Fetch();
+	uint32 temp = fields[0].GetUInt32();
+	delete result;
+	return temp;
+}
+void Player::SetJF(uint32 jf, uint32 type, uint32 item, uint32 ad) {
+	if (ad == 1)
+		LoginDatabase.PQuery("UPDATE account SET jf=jf+%u WHERE id = '%u' ", jf, GetSession()->GetAccountId());
+	else
+		LoginDatabase.PQuery("UPDATE account SET jf=jf-%u WHERE id = '%u' ", jf, GetSession()->GetAccountId());
+
+	LoginDatabase.PQuery("INSERT INTO account_detail( accountId, guid, jf, type, item) VALUES ( '%u', '%u', '%u', %u, %u)", GetSession()->GetAccountId(), GetGUID(), jf, type, item);
+}
+uint32 Player::GetZM() {
+	QueryResult* result = LoginDatabase.PQuery("SELECT zm FROM account  WHERE id = '%u' ", GetSession()->GetAccountId());
+	if (!result)
+		return 0;
+
+	Field* fields = result->Fetch();
+	uint32 temp = fields[0].GetUInt32();
+	delete result;
+	return temp;
+}
+void Player::SetZM(uint32 jf, uint32 type, uint32 item, uint32 ad) {
+	if (ad == 1)
+		LoginDatabase.PQuery("UPDATE account SET zm=zm+%u WHERE id = '%u' ", jf, GetSession()->GetAccountId());
+	else
+		LoginDatabase.PQuery("UPDATE account SET zm=zm-%u WHERE id = '%u' ", jf, GetSession()->GetAccountId());
+
+	LoginDatabase.PQuery("INSERT INTO account_detail( accountId, guid, jf, type, item) VALUES ( '%u', '%u', '%u', %u, %u)", GetSession()->GetAccountId(), GetGUID(), jf, type, item);
 }

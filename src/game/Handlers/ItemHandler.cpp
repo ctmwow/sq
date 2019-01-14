@@ -823,7 +823,10 @@ void WorldSession::SendListInventory(ObjectGuid vendorguid, uint8 menu_type)
                 data << uint32(crItem->item);
                 data << uint32(pProto->DisplayInfoID);
                 data << uint32(crItem->maxcount <= 0 ? 0xFFFFFFFF : pCreature->GetVendorItemCurrentCount(crItem));
-                data << uint32(price);
+				if (pProto->BuyIntegral > 0)
+					data << uint32(pProto->BuyIntegral * 10000);
+				else
+					data << uint32(price);
                 data << uint32(pProto->MaxDurability);
                 data << uint32(pProto->BuyCount);
             }
