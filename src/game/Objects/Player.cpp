@@ -17526,6 +17526,15 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature* npc 
     if (GetPet())
         RemovePet(PET_SAVE_REAGENTS);
 
+	//瞬飞+++
+	if (GetSession()->GetSF() == 1) {
+		TaxiNodesEntry const* _lastXYZ = sTaxiNodesStore.LookupEntry(nodes[nodes.size() - 1]);
+		m_taxi.ClearTaxiDestinations();
+		AddAura(498);//防摔死+++
+		TeleportTo(_lastXYZ->map_id, _lastXYZ->x, _lastXYZ->y, _lastXYZ->z, GetOrientation());
+		return false;
+	}
+
     WorldPacket data(SMSG_ACTIVATETAXIREPLY, 4);
     data << uint32(ERR_TAXIOK);
     GetSession()->SendPacket(&data);
