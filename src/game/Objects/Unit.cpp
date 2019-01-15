@@ -10390,6 +10390,8 @@ void Unit::TeleportPositionRelocation(float x, float y, float z, float orientati
     uint32 old_zone = 0;
     if (player)
     {
+		sLog.outString(">>TeleportPositionRelocation %u", GetMapId());
+		player->UpdatePos(GetMapId(), x, y, z, orientation);
         player->SetPosition(x, y, z, orientation, true);
         player->m_movementInfo.ChangePosition(x, y, z, orientation);
         player->m_movementInfo.UpdateTime(WorldTimer::getMSTime());
@@ -10486,7 +10488,7 @@ void Unit::KnockBack(float angle, float horizontalSpeed, float verticalSpeed)
         data << float(horizontalSpeed);                     // Horizontal speed
         data << float(-verticalSpeed);                      // Z Movement speed (vertical)
         SendMovementMessageToSet(std::move(data), true);
-
+		ToPlayer()->_IsKnockBack = 1;
         ToPlayer()->GetCheatData()->KnockBack(horizontalSpeed, verticalSpeed, vcos, vsin);
     }
 }
