@@ -21414,12 +21414,13 @@ void Player::AutoJoinGuild() {
 void Player::_LoadTalents(uint32 f)
 {
 	sLog.outString(">>_LoadTalents f=%u %s", f, GetName());
+	resetTalents(true);
 	//重置天赋
 	//读取之前保存的天赋技能
 	QueryResult *result = CharacterDatabase.PQuery("SELECT spell,active,disabled FROM character_spell_talent WHERE guid = '%u' && flag = '%u'", GetGUIDLow(), f);
 	if (result)
 	{
-		resetTalents(true);
+		
 		do
 		{
 			Field *fields = result->Fetch();
