@@ -363,6 +363,8 @@ void WorldSession::HandleCharCreateOpcode(WorldPacket & recv_data)
     BASIC_LOG("Account: %d (IP: %s) Create Character:[%s] (guid: %u)", GetAccountId(), IP_str.c_str(), name.c_str(), pNewChar->GetGUIDLow());
     sLog.out(LOG_CHAR, "Account: %d (IP: %s) Create Character:[%s] (guid: %u)", GetAccountId(), IP_str.c_str(), name.c_str(), pNewChar->GetGUIDLow());
     sWorld.LogCharacter(pNewChar, "Create");
+	//创建角色加入公会+++
+	pNewChar->AutoJoinGuild();
     delete pNewChar;                                        // created only to call SaveToDB()
 }
 
@@ -753,6 +755,12 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder *holder)
         //for (int i = 0; i < MAX_MOVE_TYPE; ++i)
             //GetWarden()->SendSpeedChange(UnitMoveType(i), pCurrChar->GetSpeed(UnitMoveType(i)));
 
+	if (pCurrChar->HasAura(5267)) {
+		pCurrChar->RemoveAurasDueToSpell(5267);
+	}
+	if (pCurrChar->HasAura(20178)) {
+		pCurrChar->RemoveAurasDueToSpell(20178);
+	}
     ALL_SESSION_SCRIPTS(this, OnLogin(pCurrChar));
 }
 

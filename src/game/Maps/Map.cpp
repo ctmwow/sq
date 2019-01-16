@@ -386,6 +386,7 @@ bool Map::Add(Player *player)
 
     player->GetSession()->ClearIncomingPacketsByType(PACKET_PROCESS_MOVEMENT);
     player->m_broadcaster->SetInstanceId(GetInstanceId());
+	SendMessageToMapPlay(player, false);
     return true;
 }
 
@@ -1165,6 +1166,7 @@ void Map::Remove(Player *player, bool remove)
     player->ResetMap();
     if (remove)
         DeleteFromWorld(player);
+	SendMessageToMapPlay(player, true);
 }
 
 template<class T>
@@ -3609,4 +3611,110 @@ GameObject* Map::SummonGameObject(uint32 entry, float x, float y, float z, float
     Add(go);
     go->SetWorldMask(worldMask);
     return go;
+}
+void Map::SendMessageToMapPlay(Player *player, bool out) const
+{
+
+	if (player->isGameMaster())
+		return;
+
+	uint32 Pcount = 0, Pcount_40 = 40, Pcount_20 = 20;
+	float Damage, DamageTanke;
+	switch (player->GetMapId())
+	{
+	case 249://奥妮克希亚的巢穴
+		Pcount = GetPlayersCountExceptGMs();
+		if (Pcount > 20) {
+			Damage = (Pcount_40 - Pcount) * 5.0f;
+			DamageTanke = (Pcount_40 - Pcount) * 2.5f;
+		}
+		else {
+			Damage = Pcount * 5.0f;
+			DamageTanke = Pcount * 2.5f;
+		}
+		break;
+	case 409://mc
+		Pcount = GetPlayersCountExceptGMs();
+		if (Pcount > 20) {
+			Damage = (Pcount_40 - Pcount) * 5.0f;
+			DamageTanke = (Pcount_40 - Pcount) * 2.5f;
+		}
+		else {
+			Damage = Pcount * 5.0f;
+			DamageTanke = Pcount * 2.5f;
+		}
+		break;
+	case 469://bwl
+		Pcount = GetPlayersCountExceptGMs();
+		if (Pcount > 20) {
+			Damage = (Pcount_40 - Pcount) * 5.0f;
+			DamageTanke = (Pcount_40 - Pcount) * 2.5f;
+		}
+		else {
+			Damage = Pcount * 5.0f;
+			DamageTanke = Pcount * 2.5f;
+		}
+		break;
+	case 309://ZG
+		Pcount = GetPlayersCountExceptGMs();
+		if (Pcount > 10) {
+			Damage = (Pcount_20 - Pcount) * 10.0f;
+			DamageTanke = (Pcount_20 - Pcount) * 5.0f;
+		}
+		else {
+			Damage = Pcount * 10.0f;
+			DamageTanke = Pcount * 5.0f;
+		}
+		break;
+	case 509://FX
+		Pcount = GetPlayersCountExceptGMs();
+		if (Pcount > 10) {
+			Damage = (Pcount_20 - Pcount) * 10.0f;
+			DamageTanke = (Pcount_20 - Pcount) * 5.0f;
+		}
+		else {
+			Damage = Pcount * 10.0f;
+			DamageTanke = Pcount * 5.0f;
+		}
+		break;
+	case 531://TAQ
+		Pcount = GetPlayersCountExceptGMs();
+		if (Pcount > 20) {
+			Damage = (Pcount_40 - Pcount) * 5.0f;
+			DamageTanke = (Pcount_40 - Pcount) * 2.5f;
+		}
+		else {
+			Damage = Pcount * 5.0f;
+			DamageTanke = Pcount * 2.5f;
+		}
+		break;
+	case 533://NAXX
+		Pcount = GetPlayersCountExceptGMs();
+		if (Pcount > 20) {
+			Damage = (Pcount_40 - Pcount) * 5.0f;
+			DamageTanke = (Pcount_40 - Pcount) * 2.5f;
+		}
+		else {
+			Damage = Pcount * 5.0f;
+			DamageTanke = Pcount * 2.5f;
+		}
+		break;
+	default:
+		//全局默认
+		return; //退出
+	}
+
+	//std::string text = ("[系统消息]副本当前人数( %u ) 伤害提高( %.2 ) 受到伤害降低( %.2 )", Pcount, Damage, DamageTanke);
+
+	for (MapRefManager::const_iterator itr = m_mapRefManager.begin(); itr != m_mapRefManager.end(); ++itr)
+		if (!itr->getSource()->isGameMaster()) {
+			//sLog.outString(" %.2f  %f ", Damage, DamageTanke);
+			if (out) {
+				ChatHandler(itr->getSource()).PSendSysMessage(20035, player->GetName(), Pcount, Damage, DamageTanke);
+			}
+			else {
+				ChatHandler(itr->getSource()).PSendSysMessage(20034, player->GetName(), Pcount, Damage, DamageTanke);
+			}
+			//itr->getSource()->SendMessageToPlayer("%s", Pcount, Damage, DamageTanke);
+		}
 }

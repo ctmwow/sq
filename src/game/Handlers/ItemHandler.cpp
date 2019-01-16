@@ -459,6 +459,9 @@ void WorldSession::HandleReadItemOpcode(WorldPacket & recv_data)
 
     if (pItem && pItem->GetProto()->PageText)
     {
+		if (_player->mReadItem(pItem->GetProto()->PageText))
+			return;//+++
+
         WorldPacket data;
 
         InventoryResult msg = _player->CanUseItem(pItem);
@@ -825,7 +828,10 @@ void WorldSession::SendListInventory(ObjectGuid vendorguid, uint8 menu_type)
                 data << uint32(crItem->item);
                 data << uint32(pProto->DisplayInfoID);
                 data << uint32(crItem->maxcount <= 0 ? 0xFFFFFFFF : pCreature->GetVendorItemCurrentCount(crItem));
-                data << uint32(price);
+				if (pProto->BuyIntegral > 0)
+					data << uint32(pProto->BuyIntegral * 10000);
+				else
+					data << uint32(price);
                 data << uint32(pProto->MaxDurability);
                 data << uint32(pProto->BuyCount);
             }
@@ -841,6 +847,75 @@ void WorldSession::SendListInventory(ObjectGuid vendorguid, uint8 menu_type)
 
     data.put<uint8>(count_pos, count);
     SendPacket(&data);
+}
+
+void WorldSession::SendListInventory_(uint64 vendorGuid, uint32 entry)
+{
+	//sLog.outString(">>vendorguid=%u entry=%u", vendorGuid, entry);
+	//VendorItemData const* items = sObjectMgr.GetNpcVendorItemList(entry);
+	VendorItemData const* vItems = sObjectMgr.GetNpcVendorItemList(entry);
+	VendorItemData const* tItems = sObjectMgr.GetNpcVendorTemplateItemList(entry);
+
+	if (!vItems && !tItems)
+	{
+		WorldPacket data(SMSG_LIST_INVENTORY, (8 + 1 + 1));
+		data << ObjectGuid(vendorGuid);
+		data << uint8(0);                                   // count==0, next will be error code
+		data << uint8(0);                                   // "Vendor has no inventory"
+		SendPacket(&data);
+		return;
+	}
+
+	uint8 customitems = vItems ? vItems->GetItemCount() : 0;
+	uint8 numitems = customitems + (tItems ? tItems->GetItemCount() : 0);
+
+	uint8 count = 0;
+
+	WorldPacket data(SMSG_LIST_INVENTORY, (8 + 1 + numitems * 7 * 4));
+	data << ObjectGuid(vendorGuid);
+
+	size_t count_pos = data.wpos();
+	data << uint8(count);
+
+	float discountMod = 1.0f;
+
+	for (int i = 0; i < numitems; ++i)
+	{
+		VendorItem const* crItem = i < customitems ? vItems->GetItem(i) : tItems->GetItem(i - customitems);
+
+		if (crItem)
+		{
+			if (ItemPrototype const *pProto = ObjectMgr::GetItemPrototype(crItem->item))
+			{
+				++count;
+
+				// reputation discount
+				uint32 price = uint32(floor(pProto->BuyPrice * discountMod));
+
+				data << uint32(count);
+				data << uint32(crItem->item);
+				data << uint32(pProto->DisplayInfoID);
+				data << uint32(0xFFFFFFFF);
+				//显示积分价格+++I
+				if (pProto->BuyIntegral > 0)
+					data << uint32(pProto->BuyIntegral * 10000);
+				else
+					data << uint32(price);
+				data << uint32(pProto->MaxDurability);
+				data << uint32(pProto->BuyCount);
+			}
+		}
+	}
+
+	if (count == 0)
+	{
+		data << uint8(0);                                   // "Vendor has no inventory"
+		SendPacket(&data);
+		return;
+	}
+
+	data.put<uint8>(count_pos, count);
+	SendPacket(&data);
 }
 
 void WorldSession::HandleAutoStoreBagItemOpcode(WorldPacket & recv_data)

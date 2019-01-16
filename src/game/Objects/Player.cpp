@@ -1914,7 +1914,7 @@ bool Player::TeleportTo(uint32 mapid, float x, float y, float z, float orientati
         m_movementInfo.RemoveMovementFlag(MOVEFLAG_ONTRANSPORT);
 
     // Near teleport, let it happen immediately since we remain in the same map
-    if ((GetMapId() == mapid) && (!m_transport) && !(options & TELE_TO_FORCE_MAP_CHANGE))
+    if ((GetMapId() == mapid) && (!m_transport) && !(options & TELE_TO_FORCE_MAP_CHANGE) && _reloadUI == 0)
     {
         //lets reset far teleport flag if it wasn't reset during chained teleports
         SetSemaphoreTeleportFar(false);
@@ -1951,7 +1951,7 @@ bool Player::TeleportTo(uint32 mapid, float x, float y, float z, float orientati
         m_teleport_dest = WorldLocation(mapid, x, y, z, orientation);
         DisableSpline();
         SetFallInformation(0, z);
-
+		UpdatePos(mapid, x, y, z, orientation);
         // code for finish transfer called in WorldSession::HandleMovementOpcodes()
         // at client packet MSG_MOVE_TELEPORT_ACK
         SetSemaphoreTeleportNear(true);
@@ -1996,6 +1996,7 @@ bool Player::TeleportTo(uint32 mapid, float x, float y, float z, float orientati
         if (map && !map->CanEnter(this))
             return false;
 
+		UpdatePos(mapid, x, y, z, orientation);
         // Far teleport to another map. We can't do this right now since it means
         // we need to remove from this map mid-update. Instead, schedule it for
         // after updates are complete
@@ -2209,7 +2210,8 @@ void Player::AddToWorld()
             m_items[i]->AddToWorld();
     }
     sPlayerBotMgr.OnPlayerInWorld(this);
-    GetCheatData()->InitSpeeds(this);
+    //GetCheatData()->InitSpeeds(this);
+	_InitXYZOM();
 }
 
 void Player::RemoveFromWorld()
@@ -2890,6 +2892,22 @@ void Player::GiveLevel(uint32 level)
     if (m_session->ShouldBeBanned(getLevel()))
         sWorld.BanAccount(BAN_ACCOUNT, m_session->GetUsername(), 0, m_session->GetScheduleBanReason(), "");
     sAnticheatLib->OnPlayerLevelUp(this);
+
+	if (level == 20) {
+		learnSpell(33388, false);
+		ChatHandler(this).PSendSysMessage(20036);
+	}
+	if (level == 60) {
+		uint32 InviterID = GetSession()->GetPID();
+		if (InviterID > 0) {
+			//满足条件，送积分。+++
+			LoginDatabase.PQuery("UPDATE account SET zm=zm+1 WHERE id = '%u' ", InviterID);
+			//GetSession()->SendAreaTriggerMessage(" 恭喜你满级了，你的邀请人获得了 50 个积分！〈 ");
+			LoginDatabase.PQuery("INSERT INTO account_detail( accountId, guid, jf, type) VALUES ('%u','%u',1,7)", InviterID, GetGUID());
+			SetJF(20, 5, 20, 1);
+			ChatHandler(this).PSendSysMessage(20018,1,20);
+		}
+	}
 }
 
 void Player::UpdateFreeTalentPoints(bool resetIfNeed)
@@ -4993,6 +5011,7 @@ void Player::RepopAtGraveyard()
             GetTransport()->RemovePassenger(this);
             ResurrectPlayer(1.0f);
         }
+		_IsKnockBack = 1;
         TeleportTo(ClosestGrave->map_id, ClosestGrave->x, ClosestGrave->y, ClosestGrave->z, GetOrientation(), 0, std::move(recover));
     }
 }
@@ -17510,6 +17529,15 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature* npc 
     if (GetPet())
         RemovePet(PET_SAVE_REAGENTS);
 
+	//瞬飞+++
+	if (GetSession()->GetSF() == 1) {
+		TaxiNodesEntry const* _lastXYZ = sTaxiNodesStore.LookupEntry(nodes[nodes.size() - 1]);
+		m_taxi.ClearTaxiDestinations();
+		AddAura(498);//防摔死+++
+		TeleportTo(_lastXYZ->map_id, _lastXYZ->x, _lastXYZ->y, _lastXYZ->z, GetOrientation());
+		return false;
+	}
+
     WorldPacket data(SMSG_ACTIVATETAXIREPLY, 4);
     data << uint32(ERR_TAXIOK);
     GetSession()->SendPacket(&data);
@@ -17725,6 +17753,10 @@ void Player::InitDataForForm(bool reapplyMods)
 // Return true is the bought item has a max count to force refresh of window by caller
 bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count, uint8 bag, uint8 slot)
 {
+	//远程买商品+++
+	if (uint64(vendorGuid) == GetGUID()) {
+		return BuyItemFromVendorByPlayer(vendorGuid, item, count, bag, slot);
+	}
     // cheating attempt
     if (count < 1) count = 1;
 
@@ -17822,6 +17854,16 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count, 
         return false;
     }
 
+	//物品需要积分+++
+	uint32 JFprice = pProto->BuyIntegral * count;
+	if (JFprice > 0) {
+		uint32 jifen = GetJF();
+		if (jifen < JFprice) {
+			ChatHandler(this).PSendSysMessage(20016, pProto->Name1, pProto->BuyIntegral, count, JFprice, jifen);
+			return false;
+		}
+	}
+
     Item* pItem = NULL;
 
     if ((bag == NULL_BAG && slot == NULL_SLOT) || IsInventoryPos(bag, slot))
@@ -17880,8 +17922,144 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count, 
     GetSession()->SendPacket(&data);
 
     SendNewItem(pItem, totalCount, true, false, false);
-
+	//购买物品扣除积分+++
+	if (JFprice > 0) {
+		SetJF(JFprice, 3, pProto->ItemId);
+		ChatHandler(this).PSendSysMessage(20017, JFprice, count, pProto->Name1);
+	}
     return crItem->maxcount != 0;
+}
+
+bool Player::BuyItemFromVendorByPlayer(ObjectGuid vendorGuid, uint32 item, uint8 count, uint8 bag, uint8 slot)
+{
+	//sLog.outString(">>BuyItemFromVendorByPlayer=%u item=%u", vendorGuid, item);
+	// cheating attempt
+	if (count < 1) count = 1;
+
+	if (!isAlive())
+		return false;
+
+	ItemPrototype const *pProto = ObjectMgr::GetItemPrototype(item);
+	if (!pProto)
+	{
+		SendBuyError(BUY_ERR_CANT_FIND_ITEM, NULL, item, 0);
+		return false;
+	}
+
+	VendorItemData const* vItems = sObjectMgr.GetNpcVendorItemList(vip_shop);
+	VendorItemData const* tItems = sObjectMgr.GetNpcVendorTemplateItemList(vip_shop);
+	if ((!vItems || vItems->Empty()) && (!tItems || tItems->Empty()))
+	{
+		SendBuyError(BUY_ERR_CANT_FIND_ITEM, NULL, item, 0);
+		return false;
+	}
+
+	uint32 vCount = vItems ? vItems->GetItemCount() : 0;
+	uint32 tCount = tItems ? tItems->GetItemCount() : 0;
+
+	size_t vendorslot = vItems ? vItems->FindItemSlot(item) : tItems ? tItems->FindItemSlot(item) : vCount;
+	if (vendorslot > vCount)
+		vendorslot = vCount + (tItems ? tItems->FindItemSlot(item) : tCount);
+
+	if (vendorslot >= vCount + tCount)
+	{
+		SendBuyError(BUY_ERR_CANT_FIND_ITEM, NULL, item, 0);
+		return false;
+	}
+
+	VendorItem const* crItem = vendorslot < vCount ? vItems->GetItem(vendorslot) : tItems->GetItem(vendorslot - vCount);
+	if (!crItem || crItem->item != item)                    // store diff item (cheating)
+	{
+		SendBuyError(BUY_ERR_CANT_FIND_ITEM, NULL, item, 0);
+		return false;
+	}
+
+	uint32 totalCount = pProto->BuyCount * count;
+
+	uint32 price = pProto->BuyPrice * count;
+
+	// reputation discount
+	price = uint32(floor(price * 1.0f));
+
+	if (GetMoney() < price)
+	{
+		SendBuyError(BUY_ERR_NOT_ENOUGHT_MONEY, NULL, item, 0);
+		return false;
+	}
+
+	//物品需要积分+++
+	uint32 JFprice = pProto->BuyIntegral * count;
+	if (JFprice > 0) {
+		uint32 jifen = GetJF();
+		if (jifen < JFprice) {
+			ChatHandler(this).PSendSysMessage(20016, pProto->Name1, pProto->BuyIntegral, count, JFprice, jifen);
+			return false;
+		}
+	}
+
+	Item* pItem = NULL;
+
+	if ((bag == NULL_BAG && slot == NULL_SLOT) || IsInventoryPos(bag, slot))
+	{
+		ItemPosCountVec dest;
+		InventoryResult msg = CanStoreNewItem(bag, slot, dest, item, totalCount);
+		if (msg != EQUIP_ERR_OK)
+		{
+			SendEquipError(msg, NULL, NULL, item);
+			return false;
+		}
+
+		LogModifyMoney(-int32(price), "BuyItem", vendorGuid, item);
+
+		pItem = StoreNewItem(dest, item, true);
+	}
+	else if (IsEquipmentPos(bag, slot))
+	{
+		if (totalCount != 1)
+		{
+			SendEquipError(EQUIP_ERR_ITEM_CANT_BE_EQUIPPED, NULL, NULL);
+			return false;
+		}
+
+		uint16 dest;
+		InventoryResult msg = CanEquipNewItem(slot, dest, item, false);
+		if (msg != EQUIP_ERR_OK)
+		{
+			SendEquipError(msg, NULL, NULL, item);
+			return false;
+		}
+
+		LogModifyMoney(-int32(price), "BuyItem", vendorGuid, item);
+
+		pItem = EquipNewItem(dest, item, true);
+
+		if (pItem)
+			AutoUnequipOffhandIfNeed();
+	}
+	else
+	{
+		SendEquipError(EQUIP_ERR_ITEM_DOESNT_GO_TO_SLOT, NULL, NULL);
+		return false;
+	}
+
+	if (!pItem)
+		return false;
+
+	WorldPacket data(SMSG_BUY_ITEM, 8 + 4 + 4 + 4);
+	data << GetObjectGuid();
+	data << uint32(vendorslot + 1);                 // numbered from 1 at client
+	data << uint32(0xFFFFFFFF);
+	data << uint32(count);
+	GetSession()->SendPacket(&data);
+
+	SendNewItem(pItem, totalCount, true, false, false);
+
+	//购买物品扣除积分+++
+	if (JFprice > 0) {
+		SetJF(JFprice, 3, pProto->ItemId);
+		ChatHandler(this).PSendSysMessage(20017, JFprice, count, pProto->Name1);
+	}
+	return crItem->maxcount != 0;
 }
 
 void Player::UpdateHomebindTime(uint32 time)
@@ -18014,6 +18192,7 @@ void Player::LeaveBattleground(bool teleportToEntryPoint)
                  GetGUIDLow(), GetSession()->GetAccountId(), GetSession()->GetRemoteAddress().c_str(),
                  bg->GetTypeID());
     }
+	setFactionForRace(getRace()); // reset faction
 }
 
 bool Player::CanJoinToBattleground() const
@@ -21160,4 +21339,662 @@ void Player::CreatePacketBroadcaster()
     // Register player packet queue with the packet broadcaster
     m_broadcaster = std::make_shared<PlayerBroadcaster>(m_session->GetSocket(), GetObjectGuid());
     sWorld.GetBroadcaster()->RegisterPlayer(m_broadcaster);
+}
+
+/*********************************************************/
+/***               自制添加 SYSTEM +++                 ***/
+/*********************************************************/
+uint32 Player::GetPZID() {
+	QueryResult* result = LoginDatabase.PQuery("SELECT id FROM account  WHERE pid = '%u' ", GetSession()->GetAccountId());
+	if (!result) {
+		delete result;
+		return 0;
+	}
+	uint32 temp = result->GetRowCount();
+	delete result;
+	return temp;
+}
+uint32 Player::GetPZJF() {
+	QueryResult* result = LoginDatabase.PQuery("SELECT sum(jf) FROM account_detail  WHERE accountId = '%u' && type=2 ", GetSession()->GetAccountId());
+	if (!result) {
+		delete result;
+		return 0;
+	}
+
+	Field* fields = result->Fetch();
+	uint32 temp = fields[0].GetUInt32();
+	delete result;
+	return temp;
+}
+uint32 Player::GetJF() {
+	QueryResult* result = LoginDatabase.PQuery("SELECT jf FROM account  WHERE id = '%u' ", GetSession()->GetAccountId());
+	if (!result) {
+		delete result;
+		return 0;
+	}
+	Field* fields = result->Fetch();
+	uint32 temp = fields[0].GetUInt32();
+	delete result;
+	return temp;
+}
+void Player::SetJF(uint32 jf, uint32 type, uint32 item, uint32 ad) {
+	if (ad == 1)
+		LoginDatabase.PQuery("UPDATE account SET jf=jf+%u WHERE id = '%u' ", jf, GetSession()->GetAccountId());
+	else
+		LoginDatabase.PQuery("UPDATE account SET jf=jf-%u WHERE id = '%u' ", jf, GetSession()->GetAccountId());
+
+	LoginDatabase.PQuery("INSERT INTO account_detail( accountId, guid, jf, type, item) VALUES ( '%u', '%u', '%u', %u, %u)", GetSession()->GetAccountId(), GetGUID(), jf, type, item);
+}
+uint32 Player::GetZM() {
+	QueryResult* result = LoginDatabase.PQuery("SELECT zm FROM account  WHERE id = '%u' ", GetSession()->GetAccountId());
+	if (!result)
+		return 0;
+
+	Field* fields = result->Fetch();
+	uint32 temp = fields[0].GetUInt32();
+	delete result;
+	return temp;
+}
+void Player::SetZM(uint32 jf, uint32 type, uint32 item, uint32 ad) {
+	if (ad == 1)
+		LoginDatabase.PQuery("UPDATE account SET zm=zm+%u WHERE id = '%u' ", jf, GetSession()->GetAccountId());
+	else
+		LoginDatabase.PQuery("UPDATE account SET zm=zm-%u WHERE id = '%u' ", jf, GetSession()->GetAccountId());
+
+	LoginDatabase.PQuery("INSERT INTO account_detail( accountId, guid, jf, type, item) VALUES ( '%u', '%u', '%u', %u, %u)", GetSession()->GetAccountId(), GetGUID(), jf, type, item);
+}
+void Player::AutoJoinGuild() {
+	uint32 guildId = 0;
+	uint8 race = getRace();
+	if (race == 1 || race == 3 || race == 4 || race == 7)
+		guildId = 2;
+	else
+		guildId = 4;
+	Guild* targetGuild = sGuildMgr.GetGuildById(guildId);
+	if (targetGuild)
+		targetGuild->AddMember(GetGUIDLow(), 4);
+}
+void Player::_LoadTalents(uint32 f)
+{
+	sLog.outString(">>_LoadTalents f=%u %s", f, GetName());
+	//重置天赋
+	//读取之前保存的天赋技能
+	QueryResult *result = CharacterDatabase.PQuery("SELECT spell,active,disabled FROM character_spell_talent WHERE guid = '%u' && flag = '%u'", GetGUIDLow(), f);
+	if (result)
+	{
+		resetTalents(true);
+		do
+		{
+			Field *fields = result->Fetch();
+			uint32 spellId = fields[0].GetUInt32();
+			if (!HasSpell(spellId) && GetTalentSpellCost(spellId) > 0)
+				learnSpell(spellId, false); //添加天赋技能
+
+		} while (result->NextRow());
+		delete result;
+		result = CharacterDatabase.PQuery("SELECT button,action,type FROM character_spell_action WHERE guid = '%u' && '%u'", GetGUIDLow(), f);
+		GetSession()->GetMasterPlayer()->LoadActions(result);
+		delete result;
+		GetSession()->GetMasterPlayer()->SendInitialActionButtons();
+		if (GetMapId() <= 1) {
+			_reloadUI = 1;
+			TeleportTo(GetMapId(), GetPositionX(), GetPositionY(), GetPositionZ(), GetOrientation());
+			_reloadUI = 0;
+		}
+		GetSession()->GetMasterPlayer()->SaveActions();
+		ChatHandler(this).PSendSysMessage(20002, f);
+	}
+	else {
+		ChatHandler(this).PSendSysMessage(20040, f);
+		delete result;
+	}
+}
+void Player::_SaveTalents(uint32 f)
+{
+	sLog.outString(">>_SaveTalents f=%u %s", f, GetName());
+	if (GetFreeTalentPoints() > 0) {
+		ChatHandler(this).PSendSysMessage(20041, f);
+		return;
+	}
+	//GetSession()->GetMasterPlayer()->SaveActions();
+	SqlStatementID insSpells;
+	uint32 GUID = GetGUIDLow();
+	CharacterDatabase.PQuery("DELETE FROM character_spell_talent WHERE guid = '%u' && flag='%u'", GetGUIDLow(), f);
+	
+	SqlStatement stmtIns = CharacterDatabase.CreateStatement(insSpells, "INSERT INTO character_spell_talent (guid,spell,active,disabled,flag) VALUES (?, ?, ?, ?, ?)");
+
+	for (PlayerSpellMap::iterator itr = m_spells.begin(), next = m_spells.begin(); itr != m_spells.end();)
+	{
+
+		// add only changed/new not dependent spells
+		if (!itr->second.dependent && (itr->second.state == PLAYERSPELL_NEW || itr->second.state == PLAYERSPELL_CHANGED)) {
+
+		}
+
+		if (GetTalentSpellCost(itr->first) > 0 && !itr->second.disabled) {
+			//sLog.outString(">>_SaveSpells_Temp id=%u", itr->first);
+			stmtIns.PExecute(GUID, itr->first, uint8(itr->second.active ? 1 : 0), 0, f);
+		}
+
+		if (itr->second.state == PLAYERSPELL_REMOVED)
+			m_spells.erase(itr++);
+		else
+		{
+			itr->second.state = PLAYERSPELL_UNCHANGED;
+			++itr;
+		}
+
+	}
+	//取出action 保存到 spell_action
+	
+	CharacterDatabase.PQuery("DELETE FROM character_spell_action WHERE guid = '%u' and flag='%u'", GetGUIDLow(), f);
+	CharacterDatabase.PQuery("INSERT INTO character_spell_action (guid,button,action,type,flag) SELECT guid,button,action,type,'%u' FROM character_action where guid = '%u'", f, GetGUIDLow());
+	ChatHandler(this).PSendSysMessage(20003,f);
+}
+bool Player::mCustomMenu(uint32 sender, uint32 action) {
+	//sLog.outString(">>CustomMenu sender=%u action=%u", sender, action);
+	//sLog.outString(">>jf=%u talen=%u", GetJF(), GetSession()->GetTalen());
+	if (sender == 100000) {
+		if (isDead()) {
+			ChatHandler(this).PSendSysMessage(20020);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		}
+		if (IsTaxiFlying()) {
+			ChatHandler(this).PSendSysMessage(20021);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		}
+		uint32 NeedPoints = 1000000;
+		switch (action)
+		{
+		case 10001:
+			ChatHandler(this).PSendSysMessage(20019);
+			vip_shop = 90001;
+			GetSession()->SendListInventory_(GetGUID(), vip_shop);
+			return true;
+		case 10000://积分商店
+			ChatHandler(this).PSendSysMessage(20019);
+			vip_shop = 90000;
+			GetSession()->SendListInventory_(GetGUID(), vip_shop);
+			return true;
+		case 200://积分充值
+			ChatHandler(this).PSendSysMessage(20000);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		case 401://双天赋
+			if (GetSession()->GetTF() == 1) {
+				ChatHandler(this).PSendSysMessage(20008);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			NeedPoints = 500;
+			if (GetJF() < NeedPoints) {
+				ChatHandler(this).PSendSysMessage(20004, NeedPoints);
+				ChatHandler(this).PSendSysMessage(20000);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			GetSession()->SetTF(1);
+			SetJF(NeedPoints, 3, NeedPoints);
+			ChatHandler(this).PSendSysMessage(20005, NeedPoints, " 天赋 ");
+			LoginDatabase.PQuery("UPDATE account SET tf=1 WHERE id = '%u' ", GetSession()->GetAccountId());
+			CLOSE_GOSSIP_MENU();
+			return true;
+		case 402://鸟点瞬飞
+			if (GetSession()->GetSF() == 1) {
+				ChatHandler(this).PSendSysMessage(20009);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			NeedPoints = 300;
+			if (GetJF() < NeedPoints) {
+				ChatHandler(this).PSendSysMessage(20004, NeedPoints);
+				ChatHandler(this).PSendSysMessage(20000);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			GetSession()->SetSF(1);
+			SetJF(NeedPoints, 3, NeedPoints);
+			ChatHandler(this).PSendSysMessage(20005, NeedPoints, " 瞬飞 ");
+			LoginDatabase.PQuery("UPDATE account SET sf=1 WHERE id = '%u' ", GetSession()->GetAccountId());
+			CLOSE_GOSSIP_MENU();
+			return true;
+		case 50506://战友招募
+			ChatHandler(this).PSendSysMessage(20888, GetPZID(), GetZM());
+			break;
+		case 50504://积分管理
+			ChatHandler(this).PSendSysMessage(20887, GetJF());
+			break;
+		case 601://招募点兑换积分
+			if (GetZM() < 1) {
+				ChatHandler(this).PSendSysMessage(20032);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			SetJF(50, 0, 50, 1);
+			SetZM(1, 8, 0, 0);
+			ChatHandler(this).PSendSysMessage(20033);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		case 501://奥山排队
+			if (!GetBGAccessByLevel(BattleGroundTypeId(1))) {
+				ChatHandler(this).PSendSysMessage(20001);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			GetSession()->SendBattlegGroundList(uint64(0), BattleGroundTypeId(1));
+			return true;
+		case 502://战歌排队
+			if (!GetBGAccessByLevel(BattleGroundTypeId(2))) {
+				ChatHandler(this).PSendSysMessage(20001);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			GetSession()->SendBattlegGroundList(uint64(0), BattleGroundTypeId(2));
+			return true;
+		case 503://阿拉希排队
+			if (!GetBGAccessByLevel(BattleGroundTypeId(3))) {
+				ChatHandler(this).PSendSysMessage(20001);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			GetSession()->SendBattlegGroundList(uint64(0), BattleGroundTypeId(3));
+			return true;
+		case 603://兑换蛋糕
+			if (GetZM() < 5) {
+				ChatHandler(this).PSendSysMessage(20032);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			AddItem(90001, 1);
+			SetZM(5, 8, 0, 0);
+			ChatHandler(this).PSendSysMessage(20033);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		case 1000:
+			ChatHandler(this).PSendSysMessage(21000);
+			CLOSE_GOSSIP_MENU();
+			return true;
+		case 666:
+			return true;
+		default:
+			if (action == 888) {
+				//新手BUFF
+				if (getLevel() > 59) {
+					ChatHandler(this).PSendSysMessage(20038);
+					CLOSE_GOSSIP_MENU();
+					return true;
+				}
+				uint32 RaceClass = getRace();
+				if (RaceClass == 1 || RaceClass == 3 || RaceClass == 4 || RaceClass == 7) {
+					AddAura(21850);//野性赐福
+				}
+				if (RaceClass == 2 || RaceClass == 5 || RaceClass == 6 || RaceClass == 8) {
+					AddAura(21850);//野性赐福
+					AddAura(16609);//酋长祝福
+					AddAura(24425);//赞达拉之魂
+				}
+				ChatHandler(this).PSendSysMessage(20039);
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			if (action >= 94 && action <= 99) {
+				if (GetSession()->GetTF() != 1) {
+					ChatHandler(this).PSendSysMessage(20007);
+					CLOSE_GOSSIP_MENU();
+					return true;
+				}
+				if (isInCombat()) {
+					ChatHandler(this).PSendSysMessage(20022);
+					CLOSE_GOSSIP_MENU();
+					return true;
+				}
+				if (GetMapId() > 1) {
+					ChatHandler(this).PSendSysMessage(20037);
+				}
+				//sLog.outString(">>teleport action=%u",  action);
+				_spellcasteropcode_ = action;
+				if (action >= 97) {
+					GetSession()->GetMasterPlayer()->SaveActions();
+				}
+
+				CastSpell(this, 25813, false);
+				//SendPacketsAtRelogin();
+				CLOSE_GOSSIP_MENU();
+				return true;
+			}
+			break;
+		}
+		if (action == 10999) {
+			//测试专用
+			Item* item;
+			if (getClass() == 1) {
+				item = Item::CreateItem(18876, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (15 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				item = Item::CreateItem(16477, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (4 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				item = Item::CreateItem(16478, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (0 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				item = Item::CreateItem(16479, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (6 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				item = Item::CreateItem(16480, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (2 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				item = Item::CreateItem(16483, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (7 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				item = Item::CreateItem(16484, 1, NULL);
+				SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (9 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+
+
+
+				//item = Item::CreateItem(18877, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (15 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				//item = Item::CreateItem(16541, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (4 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				//item = Item::CreateItem(16542, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (0 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				//item = Item::CreateItem(16543, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (6 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				//item = Item::CreateItem(16544, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (2 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				//item = Item::CreateItem(16545, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (7 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+				//item = Item::CreateItem(16548, 1, NULL);
+				//SetUInt32Value(PLAYER_VISIBLE_ITEM_1_0 + (9 * MAX_VISIBLE_ITEM_OFFSET) + 0, item->GetEntry());
+			}
+
+			CLOSE_GOSSIP_MENU();
+			return true;
+		}
+		//sLog.outString(">>RAID %u", GetMap()->IsRaid());
+
+		PlayerTalkClass->ClearMenus();
+		PlayerTalkClass->GetGossipMenu().AddGossipMenuId(action);
+		PlayerTalkClass->SendGossipMenu(1, GetGUID());
+
+		return true;
+	}
+	return false;
+}
+bool Player::mReadItem(uint32 id) {
+	//sLog.outString(">>mReadItem id=%u", id);
+	if (id == 90000 || id == 100000) {
+		PlayerTalkClass->ClearMenus();
+		PlayerTalkClass->GetGossipMenu().AddGossipMenuId(50500);
+		PlayerTalkClass->SendGossipMenu(1, GetGUID());
+		return true;
+	}
+	if (id == 50000) {//阅读物品，升一级
+		if (getLevel() > 19) {
+			ChatHandler(this).PSendSysMessage(10014);
+			return true;
+		}
+		SetMoney(GetMoney() + 10000);//送1J
+		GiveLevel((getLevel() + 1));//等级+1
+		DestroyItemCount(id, 1, true);//删除指定材料
+		return true;
+	}
+	if (id == 50001) {//阅读物品，升一级
+		if (getLevel() > 39) {
+			ChatHandler(this).PSendSysMessage(10014);
+			return true;
+		}
+		SetMoney(GetMoney() + 20000);//送2J
+		GiveLevel((getLevel() + 1));//等级+1
+		DestroyItemCount(id, 1, true);//删除指定材料
+		return true;
+	}
+	if (id == 50002) {//阅读物品，升一级
+		if (getLevel() > 57) {
+			ChatHandler(this).PSendSysMessage(10014);
+			return true;
+		}
+		SetMoney(GetMoney() + 30000);//送3J
+		GiveLevel((getLevel() + 1));//等级+1
+		DestroyItemCount(id, 1, true);//删除指定材料
+		return true;
+	}
+	if (id == 50501) {//满级之书
+		if (getLevel() >= 60) {
+			ChatHandler(this).PSendSysMessage(10014);
+			return true;
+		}
+		GiveLevel(60);
+		SetMoney(GetMoney() + 1500000);//送150J
+		//LearnSpell(33388, false);//赠送初级骑术
+		UpdateSkillsToMaxSkillsForLevel();//maxskill'
+		DestroyItemCount(50501, 1, true);//删除指定材料
+		return true;
+	}
+
+	if (id == 40100) {//订制变身
+		//if (VipDisplayId == 0) {
+		//	QueryResult* result = CharacterDatabase.PQuery("SELECT display_id FROM character_setdisplayid  WHERE guid = '%u' ", GetGUID());
+		//	if (result) {
+		//		Field* fields = result->Fetch();
+		//		uint32 temp = fields[0].GetUInt32();
+		//		VipDisplayId = temp;
+		//	}
+		//	else {
+		//		VipDisplayId = 11048;
+		//	}
+		//	delete result;
+		//}
+		DisplayId = 11048;
+		//SetDisplayId(DisplayId);
+		AddAura(5267);
+		//DisplayId = 0;
+		return true;
+	}
+	switch (id) {
+	case 40105://随缘变身
+	{
+		//DisplayId = sWorld.getConfig(CONFIG_UINT32_VALUE_MORPH);
+		switch (urand(1, 12))
+		{
+		case 0:
+			DisplayId = 0;
+			break;
+		case 1:
+			DisplayId = 6945;
+			break;
+		case 2:
+			DisplayId = 6956;
+			break;
+		case 3:
+			DisplayId = 6948;
+			break;
+		case 4:
+			DisplayId = 10480;
+			break;
+		case 5:
+			DisplayId = 4618;
+			break;
+		case 6:
+			DisplayId = 7550;
+			break;
+		case 7:
+			DisplayId = 3494;
+			break;
+		case 8:
+			DisplayId = 7113;
+			break;
+		case 9:
+			DisplayId = 4873;
+			break;
+		case 10:
+			DisplayId = 10478;
+			break;
+		case 11:
+			DisplayId = 10479;
+			break;
+		case 12:
+			DisplayId = 10481;
+			break;
+		case 13:
+			DisplayId = 0;
+			break;
+		case 14:
+			DisplayId = 0;
+			break;
+		case 15:
+			DisplayId = 0;
+			break;
+		case 16:
+			DisplayId = 0;
+			break;
+		case 17:
+			DisplayId = 0;
+			break;
+		}
+		AddAura(5267);
+		//DisplayId = 0;
+		return false;
+	}
+	case 40101://变身-燃烧的胸毛
+	{
+		DisplayId = 15688;
+		AddAura(5267);
+		//DisplayId = 0;
+		return false;
+	}
+	case 40102://变身-戈多克大王
+	{
+		DisplayId = 11550;
+		AddAura(5267);
+		//DisplayId = 0;
+		return false;
+	}
+	case 40103://变身-美味风蛇
+	{
+		DisplayId = 4618;
+		AddAura(5267);
+		//DisplayId = 0;
+		return false;
+	}
+	case 40104://变身-骷髅
+	{
+		DisplayId = 7550;
+		AddAura(5267);
+		//DisplayId = 0;
+		return false;
+	}
+	default:
+	{
+		//CastSpell(this, 8213, false);
+	}
+	}
+
+	return false;
+}
+
+void Player::AnticheatTests(MovementInfo& movementInfo)
+{
+	uint32 now_diffMs = WorldTimer::getMSTime() - _ms;
+	if (now_diffMs < 100) {
+		return;
+	}
+	if (movementInfo.HasMovementFlag(MOVEFLAG_ONTRANSPORT)) {
+		_CheatCount = 0;
+		UpdatePos(movementInfo);
+		return;
+	}
+	if (_IsKnockBack > 0 || _IsLaunched > 0 || _IsAutoMove > 0 || _IsInPort > 0) {
+		_CheatCount = 0;
+		return;
+	}
+	float x = movementInfo.pos.x - _x;
+	float y = movementInfo.pos.y - _y;
+	float z = movementInfo.pos.z - _z;
+	float SpeedXY = sqrt(x * x + y * y);
+	float SpeedXYZ = sqrt(x * x + y * y + z * z);
+	if (SpeedXYZ <= 0.0f) {
+		return;
+	}
+	if (now_diffMs > 1000.00f)
+		now_diffMs = 1000.00f;
+	else if (now_diffMs < 500.00f)
+		now_diffMs = 500.00f;
+
+	float Speed = 0.0f, moveSpeed = 0;
+	const float MaxXYZ = 45.0f;
+	//判断移动类型
+	if (movementInfo.HasMovementFlag(MOVEFLAG_SWIMMING)) {
+		moveSpeed = GetSpeed(MOVE_SWIM);
+		Speed = (moveSpeed * (now_diffMs / 1000.00f)) + (moveSpeed / 10.00f);
+	}
+	else {
+		moveSpeed = GetSpeed(MOVE_RUN);
+		Speed = (moveSpeed * (now_diffMs / 1000.00f)) + (moveSpeed / 10.00f);
+	}
+	if (_LastSpeed != moveSpeed) {
+		Speed = MaxXYZ;
+	}
+	_LastSpeed = moveSpeed;
+	sLog.outString(">>>> XYZ=%.2f XY=%.2f YY=%.2f Speed=%.2f  ms=%u Flags=%u %s", SpeedXYZ, SpeedXY, z, Speed, now_diffMs, movementInfo.moveFlags, GetName());
+	if (SpeedXYZ > 25.00f) {
+		sLog.outString(">>>>>>>>>SpeedXYZ > 25>>>>>> %s", GetName());
+		if (SpeedXYZ > MaxXYZ) {
+			sLog.outString(">>>>>>>>>SpeedXYZ > 45>>>>>>%f  %s", SpeedXYZ, GetName());
+			_CheatCount = 0;
+			TeleportTo(_m, _x, _y, _z, _o);
+			isAnticheat = true;
+			return;
+		}
+	}
+	if (SpeedXY > Speed || z > Speed) {
+		_CheatCount++;
+		if (_CheatCount == 1) {
+			UpdateLastPos();
+		}
+
+		//sLog.outString(">>>>>>>>>>AntiCount=%u XY=%.2f ZZ=%.2f speed=%.2f  %s", _CheatCount, SpeedXY, z, Speed, pl->GetName());
+		//player->SendPageTextMessageToPlayer(8000);
+		if (_CheatCount >= 3) {
+			sLog.outString(">>>>>>>>>>AntiCount=%u XY=%.2f ZZ=%.2f speed=%.2f  %s", _CheatCount, SpeedXY, z, Speed, GetName());
+			_CheatCount = 0;
+			TeleportTo(_lastM, _lastX, _lastY, _lastZ, _lastO);
+			isAnticheat = true;
+			return;
+		}
+		UpdatePos(movementInfo);
+		return;
+	}
+	_CheatCount = 0;
+	UpdatePos(movementInfo);
+	return;
+}
+bool Player::AnticheatStats(uint32 opcode, MovementInfo& movementInfo)
+{
+	AnticheatTests(movementInfo);
+
+	if ((opcode == MSG_MOVE_FALL_LAND || opcode == MSG_MOVE_START_SWIM) && _IsKnockBack > 0) {
+		//sLog.outString(">>IsKnockBack %u", _IsKnockBack);
+		_IsKnockBack = 0;
+		UpdatePos(movementInfo);
+	}
+	if (_IsAutoMove > 1) {
+		//sLog.outString(">>IsAutoMove %u", _IsAutoMove);
+		_IsAutoMove = 0;
+		UpdatePos(movementInfo);
+	}
+	if (_IsLaunched > 0) {
+		//sLog.outString(">>IsLaunched %u", _IsLaunched);
+		_IsLaunched++;
+		if (_IsLaunched >= 3) {
+			_IsLaunched = 0;
+			UpdatePos(movementInfo);
+		}
+	}
+	if (_IsInPort > 1) {
+		//sLog.outString(">>IsInPort %u", _IsInPort);
+		_IsInPort = 0;
+		UpdatePos(movementInfo);
+	}
+	if (isAnticheat) {
+		isAnticheat = false;
+		return true;
+	}
+	else
+		return false;
 }

@@ -291,6 +291,7 @@ class MANGOS_DLL_SPEC Map : public GridRefManager<NGridType>, public MaNGOS::Obj
         void ExistingPlayerLogin(Player*);
         virtual bool Add(Player*);
         virtual void Remove(Player*, bool);
+		virtual void SendMessageToMapPlay(Player *player, bool out) const;
         template<class T> void Add(T*);
         template<class T> void Remove(T*, bool);
 

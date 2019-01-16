@@ -164,7 +164,7 @@ int WorldSocket::HandleAuthSession(WorldPacket& recvPacket)
     // No SQL injection, username escaped.
 
     QueryResult *result = LoginDatabase.PQuery("SELECT a.id, aa.gmLevel, a.sessionkey, a.last_ip, a.locked, a.v, a.s, a.mutetime, a.locale, a.os, a.flags, "
-        "ab.unbandate > UNIX_TIMESTAMP() OR ab.unbandate = ab.bandate FROM account a LEFT JOIN account_access aa ON a.id = aa.id AND aa.RealmID IN (-1, %u) "
+        "ab.unbandate > UNIX_TIMESTAMP() OR ab.unbandate = ab.bandate, a.talent, a.tf, a.sf, a.zc, a.pid FROM account a LEFT JOIN account_access aa ON a.id = aa.id AND aa.RealmID IN (-1, %u) "
         "LEFT JOIN account_banned ab ON a.id = ab.id AND ab.active = 1 WHERE a.username = '%s' ORDER BY aa.RealmID DESC LIMIT 1", realmID, safe_account.c_str());
 
     // Stop if the account is not found
@@ -233,6 +233,11 @@ int WorldSocket::HandleAuthSession(WorldPacket& recvPacket)
     os = fields[9].GetString();
     uint32 accFlags = fields[10].GetUInt32();
     bool isBanned = fields[11].GetBool();
+	uint32 talent = fields[12].GetUInt32();
+	uint32 TF = fields[13].GetUInt32();
+	uint32 SF = fields[14].GetUInt32();
+	uint32 ZC = fields[15].GetUInt32();
+	uint32 PID = fields[16].GetUInt32();
     delete result;
 
     
@@ -320,7 +325,11 @@ int WorldSocket::HandleAuthSession(WorldPacket& recvPacket)
     m_Session->SetOS(clientOs);
     m_Session->LoadTutorialsData();
     m_Session->InitWarden(&K);
-
+	m_Session->SetTalen(talent);
+	m_Session->SetTF(TF);
+	m_Session->SetSF(SF);
+	m_Session->SetZC(ZC);
+	m_Session->SetPID(PID);
     // In case needed sometime the second arg is in microseconds 1 000 000 = 1 sec
     ACE_OS::sleep(ACE_Time_Value(0, 10000));
 
