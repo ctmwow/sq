@@ -21418,10 +21418,11 @@ void Player::_LoadTalents(uint32 f)
 	sLog.outString(">>_LoadTalents f=%u %s", f, GetName());
 	//重置天赋
 	//读取之前保存的天赋技能
+	resetTalents(true);
 	QueryResult *result = CharacterDatabase.PQuery("SELECT spell,active,disabled FROM character_spell_talent WHERE guid = '%u' && flag = '%u'", GetGUIDLow(), f);
 	if (result)
 	{
-		resetTalents(true);
+		
 		do
 		{
 			Field *fields = result->Fetch();
@@ -21889,7 +21890,6 @@ bool Player::mReadItem(uint32 id) {
 
 void Player::AnticheatTests(MovementInfo& movementInfo)
 {
-	IsInWater();
 	uint32 now_diffMs = WorldTimer::getMSTime() - _ms;
 	if (now_diffMs < 100) {
 		return;
@@ -21931,7 +21931,7 @@ void Player::AnticheatTests(MovementInfo& movementInfo)
 		Speed = MaxXYZ;
 	}
 	_LastSpeed = moveSpeed;
-	sLog.outString(">>>> XYZ=%.2f XY=%.2f YY=%.2f Speed=%.2f  ms=%u Flags=%u %s", SpeedXYZ, SpeedXY, z, Speed, now_diffMs, movementInfo.moveFlags, GetName());
+	//sLog.outString(">>>> XYZ=%.2f XY=%.2f YY=%.2f Speed=%.2f  ms=%u Flags=%u %s", SpeedXYZ, SpeedXY, z, Speed, now_diffMs, movementInfo.moveFlags, GetName());
 	if (SpeedXYZ > (moveSpeed * 2.0f)) {
 		sLog.outString(">>>>>>>>>SpeedXYZ %.2f > %.2f >>>>>> %s", SpeedXYZ, moveSpeed * 2.0f,GetName());
 		if (SpeedXYZ > MaxXYZ) {
@@ -21966,6 +21966,7 @@ void Player::AnticheatTests(MovementInfo& movementInfo)
 }
 bool Player::AnticheatStats(uint32 opcode, MovementInfo& movementInfo)
 {
+	return true;
 	AnticheatTests(movementInfo);
 
 	if ((opcode == MSG_MOVE_FALL_LAND || opcode == MSG_MOVE_START_SWIM) && _IsKnockBack > 0) {

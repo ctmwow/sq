@@ -3061,6 +3061,9 @@ void Aura::HandleModCharm(bool apply, bool Real)
 
     Unit *target = GetTarget();
 
+	if (!target)
+		return;
+
     // not charm yourself
     if (GetCasterGuid() == target->GetObjectGuid())
         return;
@@ -3147,7 +3150,7 @@ void Aura::HandleModCharm(bool apply, bool Real)
                 delete oldAi;
                 pPlayer->i_AI = new PlayerControlledAI(pPlayer, caster);
             }
-			sLog.outString(">>>>>>>>>SET _IsAutoMove > 1>>>>>> %s", pPlayer->GetName());
+			//sLog.outString(">>>>>>>>>SET _IsAutoMove > 1>>>>>> %s", pPlayer->GetName());
 			pPlayer->_IsAutoMove = 1;
         }
         target->UpdateControl();
@@ -3199,7 +3202,7 @@ void Aura::HandleModCharm(bool apply, bool Real)
         {
             Player* pPlayer = target->ToPlayer();
             ((Player*)target)->setFactionForRace(target->getRace());
-			sLog.outString(">>>>>>>>>SET _IsAutoMove > 2>>>>>> %s", pPlayer->GetName());
+			//sLog.outString(">>>>>>>>>SET _IsAutoMove > 2>>>>>> %s", pPlayer->GetName());
 			pPlayer->_IsAutoMove = 2;
         }
         // this should possibly be the case for other spells too...

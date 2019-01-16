@@ -161,7 +161,7 @@ void SqlResultQueue::Update(uint32 timeout)
         threads[i] = new ACE_Based::Thread(caller);
     // Now execute thread unsafe callbacks
     MaNGOS::IQueryCallback* s = NULL;
-    uint32 unsafeQueryTime = WorldTimer::getMSTime();
+
     while (_threadUnsafeWaitingQueries.next(s))
     {
         s->Execute();
@@ -170,10 +170,9 @@ void SqlResultQueue::Update(uint32 timeout)
         if (timeout && WorldTimer::getMSTimeDiffToNow(begin) > timeout)
             break;
     }
-    if (unsafeQueryTime > timeout)
-    {
-        sLog.out(LOG_PERFORMANCE, "Unsafe queries took longer than the timeout. %u remaining", numUnsafeQueries);
-    }
+	if (numUnsafeQueries > 1000) // Bottleneck here
+		sLog.out(LOG_PERFORMANCE, "Database: %u unsafe queries remaining!", numUnsafeQueries);
+
 
     caller->StopProcessing();
 

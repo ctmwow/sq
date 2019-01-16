@@ -10383,7 +10383,7 @@ void Unit::TeleportPositionRelocation(float x, float y, float z, float orientati
     uint32 old_zone = 0;
     if (player)
     {
-		sLog.outString(">>TeleportPositionRelocation %u", GetMapId());
+		//sLog.outString(">>TeleportPositionRelocation %u", GetMapId());
 		player->UpdatePos(GetMapId(), x, y, z, orientation);
         player->SetPosition(x, y, z, orientation, true);
         player->m_movementInfo.ChangePosition(x, y, z, orientation);
