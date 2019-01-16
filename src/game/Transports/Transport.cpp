@@ -187,7 +187,7 @@ void Transport::AddPassenger(WorldObject* passenger)
     if (_passengers.insert(passenger).second)
     {
         DEBUG_LOG("Object %s added to transport %s.", passenger->GetName(), GetName());
-		sLog.outString(">>Object %s added to transport %s.", passenger->GetName(), GetName());
+		//sLog.outString(">>Object %s added to transport %s.", passenger->GetName(), GetName());
 		passenger->ToPlayer()->_IsInPort = 1;
         passenger->SetTransport(this);
         passenger->m_movementInfo.AddMovementFlag(MOVEFLAG_ONTRANSPORT);
@@ -226,7 +226,8 @@ void Transport::RemovePassenger(WorldObject* passenger)
         passenger->SetTransport(NULL);
         passenger->m_movementInfo.ClearTransportData();
         DEBUG_LOG("Object %s removed from transport %s.", passenger->GetName(), GetName());
-		sLog.outString(">>Object %s removed from transport %s.", passenger->GetName(), GetName());
+		//sLog.outString(">>Object %s removed from transport %s.", passenger->GetName(), GetName());
+		passenger->ToPlayer()->_IsInPort = 2;
     }
 }
 
