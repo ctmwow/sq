@@ -1951,7 +1951,7 @@ bool Player::TeleportTo(uint32 mapid, float x, float y, float z, float orientati
         m_teleport_dest = WorldLocation(mapid, x, y, z, orientation);
         DisableSpline();
         SetFallInformation(0, z);
-		UpdatePos(mapid, x, y, z, orientation);
+
         // code for finish transfer called in WorldSession::HandleMovementOpcodes()
         // at client packet MSG_MOVE_TELEPORT_ACK
         SetSemaphoreTeleportNear(true);
@@ -1996,7 +1996,6 @@ bool Player::TeleportTo(uint32 mapid, float x, float y, float z, float orientati
         if (map && !map->CanEnter(this))
             return false;
 
-		UpdatePos(mapid, x, y, z, orientation);
         // Far teleport to another map. We can't do this right now since it means
         // we need to remove from this map mid-update. Instead, schedule it for
         // after updates are complete
@@ -2210,8 +2209,7 @@ void Player::AddToWorld()
             m_items[i]->AddToWorld();
     }
     sPlayerBotMgr.OnPlayerInWorld(this);
-    //GetCheatData()->InitSpeeds(this);
-	_InitXYZOM();
+    GetCheatData()->InitSpeeds(this);
 }
 
 void Player::RemoveFromWorld()
@@ -2513,6 +2511,7 @@ void Player::SetInWater(bool apply)
 {
     if (m_isInWater == apply)
         return;
+
     //define player in water by opcodes
     //move player's guid into HateOfflineList of those mobs
     //which can't swim and move guid back into ThreatList when
@@ -5010,7 +5009,6 @@ void Player::RepopAtGraveyard()
             GetTransport()->RemovePassenger(this);
             ResurrectPlayer(1.0f);
         }
-		_IsKnockBack = 1;
         TeleportTo(ClosestGrave->map_id, ClosestGrave->x, ClosestGrave->y, ClosestGrave->z, GetOrientation(), 0, std::move(recover));
     }
 }
@@ -21418,11 +21416,10 @@ void Player::_LoadTalents(uint32 f)
 	sLog.outString(">>_LoadTalents f=%u %s", f, GetName());
 	//重置天赋
 	//读取之前保存的天赋技能
-	resetTalents(true);
 	QueryResult *result = CharacterDatabase.PQuery("SELECT spell,active,disabled FROM character_spell_talent WHERE guid = '%u' && flag = '%u'", GetGUIDLow(), f);
 	if (result)
 	{
-		
+		resetTalents(true);
 		do
 		{
 			Field *fields = result->Fetch();
@@ -21886,116 +21883,4 @@ bool Player::mReadItem(uint32 id) {
 	}
 
 	return false;
-}
-
-void Player::AnticheatTests(MovementInfo& movementInfo)
-{
-	uint32 now_diffMs = WorldTimer::getMSTime() - _ms;
-	if (now_diffMs < 100) {
-		return;
-	}
-	if (movementInfo.HasMovementFlag(MOVEFLAG_ONTRANSPORT)) {
-		_CheatCount = 0;
-		UpdatePos(movementInfo);
-		return;
-	}
-	if (_IsKnockBack > 0 || _IsLaunched > 0 || _IsAutoMove > 0 || _IsInPort > 0) {
-		_CheatCount = 0;
-		return;
-	}
-	float x = movementInfo.pos.x - _x;
-	float y = movementInfo.pos.y - _y;
-	float z = movementInfo.pos.z - _z;
-	float SpeedXY = sqrt(x * x + y * y);
-	float SpeedXYZ = sqrt(x * x + y * y + z * z);
-	if (SpeedXYZ <= 0.0f) {
-		return;
-	}
-	if (now_diffMs > 1000.00f)
-		now_diffMs = 1000.00f;
-	else if (now_diffMs < 500.00f)
-		now_diffMs = 500.00f;
-
-	float Speed = 0.0f, moveSpeed = 0;
-	const float MaxXYZ = 45.0f;
-	//判断移动类型
-	if (movementInfo.HasMovementFlag(MOVEFLAG_SWIMMING)) {
-		moveSpeed = GetSpeed(MOVE_SWIM);
-		Speed = (moveSpeed * (now_diffMs / 1000.00f)) + (moveSpeed / 10.00f);
-	}
-	else {
-		moveSpeed = GetSpeed(MOVE_RUN);
-		Speed = (moveSpeed * (now_diffMs / 1000.00f)) + (moveSpeed / 10.00f);
-	}
-	if (_LastSpeed != moveSpeed) {
-		Speed = MaxXYZ;
-	}
-	_LastSpeed = moveSpeed;
-	//sLog.outString(">>>> XYZ=%.2f XY=%.2f YY=%.2f Speed=%.2f  ms=%u Flags=%u %s", SpeedXYZ, SpeedXY, z, Speed, now_diffMs, movementInfo.moveFlags, GetName());
-	if (SpeedXYZ > (moveSpeed * 2.0f)) {
-		sLog.outString(">>>>>>>>>SpeedXYZ %.2f > %.2f >>>>>> %s", SpeedXYZ, moveSpeed * 2.0f,GetName());
-		if (SpeedXYZ > MaxXYZ) {
-			sLog.outString(">>>>>>>>>SpeedXYZ > 45>>>>>>%f  %s", SpeedXYZ, GetName());
-			_CheatCount = 0;
-			TeleportTo(_m, _x, _y, _z, _o);
-			isAnticheat = true;
-			return;
-		}
-	}
-	if (SpeedXY > Speed || z > Speed) {
-		_CheatCount++;
-		if (_CheatCount == 1) {
-			UpdateLastPos();
-		}
-
-		//sLog.outString(">>>>>>>>>>AntiCount=%u XY=%.2f ZZ=%.2f speed=%.2f  %s", _CheatCount, SpeedXY, z, Speed, pl->GetName());
-		//player->SendPageTextMessageToPlayer(8000);
-		if (_CheatCount >= 3) {
-			sLog.outString(">>>>>>>>>>AntiCount=%u XY=%.2f ZZ=%.2f speed=%.2f  %s", _CheatCount, SpeedXY, z, Speed, GetName());
-			_CheatCount = 0;
-			TeleportTo(_lastM, _lastX, _lastY, _lastZ, _lastO);
-			isAnticheat = true;
-			return;
-		}
-		UpdatePos(movementInfo);
-		return;
-	}
-	_CheatCount = 0;
-	UpdatePos(movementInfo);
-	return;
-}
-bool Player::AnticheatStats(uint32 opcode, MovementInfo& movementInfo)
-{
-	return true;
-	AnticheatTests(movementInfo);
-
-	if ((opcode == MSG_MOVE_FALL_LAND || opcode == MSG_MOVE_START_SWIM) && _IsKnockBack > 0) {
-		//sLog.outString(">>IsKnockBack %u", _IsKnockBack);
-		_IsKnockBack = 0;
-		UpdatePos(movementInfo);
-	}
-	if (_IsAutoMove > 1) {
-		//sLog.outString(">>IsAutoMove %u", _IsAutoMove);
-		_IsAutoMove = 0;
-		UpdatePos(movementInfo);
-	}
-	if (_IsLaunched > 0) {
-		//sLog.outString(">>IsLaunched %u", _IsLaunched);
-		_IsLaunched++;
-		if (_IsLaunched >= 3) {
-			_IsLaunched = 0;
-			UpdatePos(movementInfo);
-		}
-	}
-	if (_IsInPort > 1) {
-		//sLog.outString(">>IsInPort %u", _IsInPort);
-		_IsInPort = 0;
-		UpdatePos(movementInfo);
-	}
-	if (isAnticheat) {
-		isAnticheat = false;
-		return true;
-	}
-	else
-		return false;
 }

@@ -8271,7 +8271,6 @@ void Spell::OnSpellLaunch()
     // Delay attack, otherwise player makes instant attack after cast
     if (m_caster->GetTypeId() == TYPEID_PLAYER)
     {
-		m_caster->ToPlayer()->_IsLaunched = 1;
         m_caster->setAttackTimer(BASE_ATTACK, m_caster->getAttackTimer(BASE_ATTACK) + 200 + 40 * m_caster->GetDistance(unitTarget));
         m_caster->setAttackTimer(OFF_ATTACK,  m_caster->getAttackTimer(OFF_ATTACK)  + 200 + 40 * m_caster->GetDistance(unitTarget));
     }
