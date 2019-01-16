@@ -2612,9 +2612,12 @@ void Aura::HandleAuraTransform(bool apply, bool Real)
             if (model_id)
             {
 				//5169 迪菲亚伪装 5267 达拉然巫师
-				if (GetId() == 5267 && target->GetAffectingPlayer()->DisplayId > 0) {
-					model_id = target->GetAffectingPlayer()->DisplayId;
+				if (GetCaster() && GetId() == 5267)
+				{
+					if (GetCaster()->ToPlayer()->DisplayId > 0)
+						model_id = GetCaster()->ToPlayer()->DisplayId;
 				}
+
                 target->SetDisplayId(model_id);
                 target->setTransformScale(mod_x);
             }
