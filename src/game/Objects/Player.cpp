@@ -2513,7 +2513,6 @@ void Player::SetInWater(bool apply)
 {
     if (m_isInWater == apply)
         return;
-
     //define player in water by opcodes
     //move player's guid into HateOfflineList of those mobs
     //which can't swim and move guid back into ThreatList when
@@ -21890,6 +21889,7 @@ bool Player::mReadItem(uint32 id) {
 
 void Player::AnticheatTests(MovementInfo& movementInfo)
 {
+	IsInWater();
 	uint32 now_diffMs = WorldTimer::getMSTime() - _ms;
 	if (now_diffMs < 100) {
 		return;
@@ -21932,8 +21932,8 @@ void Player::AnticheatTests(MovementInfo& movementInfo)
 	}
 	_LastSpeed = moveSpeed;
 	sLog.outString(">>>> XYZ=%.2f XY=%.2f YY=%.2f Speed=%.2f  ms=%u Flags=%u %s", SpeedXYZ, SpeedXY, z, Speed, now_diffMs, movementInfo.moveFlags, GetName());
-	if (SpeedXYZ > 25.00f) {
-		sLog.outString(">>>>>>>>>SpeedXYZ > 25>>>>>> %s", GetName());
+	if (SpeedXYZ > (moveSpeed * 2.0f)) {
+		sLog.outString(">>>>>>>>>SpeedXYZ %.2f > %.2f >>>>>> %s", SpeedXYZ, moveSpeed * 2.0f,GetName());
 		if (SpeedXYZ > MaxXYZ) {
 			sLog.outString(">>>>>>>>>SpeedXYZ > 45>>>>>>%f  %s", SpeedXYZ, GetName());
 			_CheatCount = 0;
