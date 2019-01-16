@@ -9748,12 +9748,7 @@ void Unit::ModConfuseSpell(bool apply, ObjectGuid casterGuid, uint32 spellID, Mo
     if (GetTypeId() == TYPEID_UNIT)
         if (ToCreature()->IsTotem())
             return;
-	if (GetTypeId() == TYPEID_PLAYER) {
-		if (apply)
-			ToPlayer()->_IsAutoMove = 1;
-		else
-			ToPlayer()->_IsAutoMove = 2;
-	}
+
     bool controlFinished = true;
 
     if (HasAuraType(SPELL_AURA_MOD_CONFUSE))
