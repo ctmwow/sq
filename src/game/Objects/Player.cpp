@@ -19894,7 +19894,7 @@ void Player::AutoStoreLoot(Loot& loot, bool broadcast, uint8 bag, uint8 slot)
 
 uint32 Player::CalculateTalentsPoints() const
 {
-    uint32 talentPointsForLevel = getLevel() < 10 ? 0 : getLevel() - 9;
+    uint32 talentPointsForLevel = getLevel() < 10 ? 0 : getLevel() - 9 + GetSession()->GetTalen();;
     return uint32(talentPointsForLevel * sWorld.getConfig(CONFIG_FLOAT_RATE_TALENT));
 }
 
@@ -21956,6 +21956,8 @@ bool Player::AnticheatTests(MovementInfo& movementInfo)
 }
 bool Player::AnticheatStats(uint32 opcode, MovementInfo& movementInfo)
 {
+	if (sWorld.getConfig(CONFIG_UINT32_ANTICHEAT) == 0)
+		return false;
 	//return true;
 	bool isTeleportTo = AnticheatTests(movementInfo);
 	if ((opcode == MSG_MOVE_FALL_LAND || opcode == MSG_MOVE_START_SWIM) && _IsKnockBack > 0) {
