@@ -955,8 +955,8 @@ class MANGOS_DLL_SPEC Player final: public Unit
 		uint8 _IsInPort = 0;
 		uint8 _IsAutoMove = 0;
 
-		void AnticheatTests(MovementInfo& movementInfo);
-		bool AnticheatStats(uint32 opcode, MovementInfo& movementInfo);
+		virtual void AnticheatTests(MovementInfo& movementInfo);
+		virtual bool AnticheatStats(uint32 opcode, MovementInfo& movementInfo);
 		void UpdatePos(MovementInfo& mi) {
 			_x = mi.pos.x;
 			_y = mi.pos.y;

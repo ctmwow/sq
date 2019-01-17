@@ -21422,7 +21422,6 @@ void Player::_LoadTalents(uint32 f)
 	QueryResult *result = CharacterDatabase.PQuery("SELECT spell,active,disabled FROM character_spell_talent WHERE guid = '%u' && flag = '%u'", GetGUIDLow(), f);
 	if (result)
 	{
-		
 		do
 		{
 			Field *fields = result->Fetch();
@@ -21931,7 +21930,7 @@ void Player::AnticheatTests(MovementInfo& movementInfo)
 		Speed = MaxXYZ;
 	}
 	_LastSpeed = moveSpeed;
-	//sLog.outString(">>>> XYZ=%.2f XY=%.2f YY=%.2f Speed=%.2f  ms=%u Flags=%u %s", SpeedXYZ, SpeedXY, z, Speed, now_diffMs, movementInfo.moveFlags, GetName());
+	sLog.outString(">>>> XYZ=%.2f XY=%.2f YY=%.2f Speed=%.2f  ms=%u Flags=%u %s", SpeedXYZ, SpeedXY, z, Speed, now_diffMs, movementInfo.moveFlags, GetName());
 	if (SpeedXYZ > (moveSpeed * 2.0f)) {
 		sLog.outString(">>>>>>>>>SpeedXYZ %.2f > %.2f >>>>>> %s", SpeedXYZ, moveSpeed * 2.0f,GetName());
 		if (SpeedXYZ > MaxXYZ) {
@@ -21966,7 +21965,7 @@ void Player::AnticheatTests(MovementInfo& movementInfo)
 }
 bool Player::AnticheatStats(uint32 opcode, MovementInfo& movementInfo)
 {
-	return true;
+	//return true;
 	AnticheatTests(movementInfo);
 
 	if ((opcode == MSG_MOVE_FALL_LAND || opcode == MSG_MOVE_START_SWIM) && _IsKnockBack > 0) {
