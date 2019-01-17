@@ -9748,12 +9748,6 @@ void Unit::ModConfuseSpell(bool apply, ObjectGuid casterGuid, uint32 spellID, Mo
     if (GetTypeId() == TYPEID_UNIT)
         if (ToCreature()->IsTotem())
             return;
-	if (GetTypeId() == TYPEID_PLAYER) {
-		if (apply)
-			ToPlayer()->_IsAutoMove = 1;
-		else
-			ToPlayer()->_IsAutoMove = 2;
-	}
     bool controlFinished = true;
 
     if (HasAuraType(SPELL_AURA_MOD_CONFUSE))
@@ -10383,8 +10377,6 @@ void Unit::TeleportPositionRelocation(float x, float y, float z, float orientati
     uint32 old_zone = 0;
     if (player)
     {
-		//sLog.outString(">>TeleportPositionRelocation %u", GetMapId());
-		player->UpdatePos(GetMapId(), x, y, z, orientation);
         player->SetPosition(x, y, z, orientation, true);
         player->m_movementInfo.ChangePosition(x, y, z, orientation);
         player->m_movementInfo.UpdateTime(WorldTimer::getMSTime());
