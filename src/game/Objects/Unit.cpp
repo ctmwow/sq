@@ -11868,8 +11868,8 @@ float Unit::CalculateDamageResult(Unit *pVictim, float bonus, uint32 spellProtoI
 					12723
 				};
 				uint32* Result;
-				Result = std::find(_spellId_, _spellId_ + 23, spellProtoId);
-				if (Result == _spellId_ + 23) {
+				Result = std::find(_spellId_, _spellId_ + 25, spellProtoId);
+				if (Result == _spellId_ + 25) {
 					bonus = bonus + (DamageBonus - 1.00f);
 				}
 			}

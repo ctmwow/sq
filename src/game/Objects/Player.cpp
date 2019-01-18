@@ -19740,7 +19740,7 @@ void Player::AutoStoreLoot(Loot& loot, bool broadcast, uint8 bag, uint8 slot)
 
 uint32 Player::CalculateTalentsPoints() const
 {
-    uint32 talentPointsForLevel = getLevel() < 10 ? 0 : getLevel() - 9;
+    uint32 talentPointsForLevel = getLevel() < 10 ? 0 : getLevel() - 9 + GetSession()->GetTalen();
     return uint32(talentPointsForLevel * sWorld.getConfig(CONFIG_FLOAT_RATE_TALENT));
 }
 
@@ -21261,10 +21261,10 @@ void Player::_LoadTalents(uint32 f)
 	sLog.outString(">>_LoadTalents f=%u %s", f, GetName());
 	//重置天赋
 	//读取之前保存的天赋技能
+	resetTalents(true);
 	QueryResult *result = CharacterDatabase.PQuery("SELECT spell,active,disabled FROM character_spell_talent WHERE guid = '%u' && flag = '%u'", GetGUIDLow(), f);
 	if (result)
 	{
-		resetTalents(true);
 		do
 		{
 			Field *fields = result->Fetch();
