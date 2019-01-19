@@ -2182,7 +2182,19 @@ bool ChatHandler::HandleAnticheatCommand(char* args)
 
     return true;
 }
-
+bool ChatHandler::HandleAnticheatLVCommand(char* args)
+{
+	uint32 level = 0;
+	if (!*args)
+		return false;
+	if (!ExtractUInt32(&args, level))
+	{
+		return false;
+	}
+	sWorld.setConfig(CONFIG_UINT32_ANTICHEAT, level);
+	PSendSysMessage("SETANTICHEAT LV=%u ", level);
+	return true;
+}
 bool ChatHandler::HandleWardenCommand(char* args)
 {
     /*Player* player = NULL;

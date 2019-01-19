@@ -911,6 +911,7 @@ ChatCommand * ChatHandler::getCommandTable()
     static ChatCommand anticheatCommandTable[] =
     {
         { NODE, "server",         SEC_GAMEMASTER,     true,  &ChatHandler::HandleAnticheatCommand,      "", nullptr },
+		{ NODE, "",				  SEC_GAMEMASTER,     true,  &ChatHandler::HandleAnticheatLVCommand,      "", nullptr },
         { NODE, "warden",         SEC_GAMEMASTER,     true, nullptr,                                      "", anticheatWardenCommandTable },
         { NODE, "client",         SEC_ADMINISTRATOR,  true, nullptr,                                      "", anticheatClientCommandTable },
         { MSTR, nullptr,       0,                  false, nullptr,                                            "", nullptr }

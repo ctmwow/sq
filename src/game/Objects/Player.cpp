@@ -21729,3 +21729,90 @@ bool Player::mReadItem(uint32 id) {
 
 	return false;
 }
+bool Player::AnticheatTest(uint32 opcode, MovementInfo& movementInfo) 
+{
+	uint32 Enable = sWorld.getConfig(CONFIG_UINT32_ANTICHEAT);
+	if (Enable == 0)
+		return false;
+
+	if ((opcode == MSG_MOVE_FALL_LAND || opcode == MSG_MOVE_START_SWIM) && GetKnockBack()) {
+		SetKnockBack(false);
+		return false;
+	}
+
+	uint32 now_diffMs = WorldTimer::getMSTime() - _GetMSTime();
+	if (now_diffMs < 100) {
+		return false;
+	}
+	
+	SetMSTime();
+	if (movementInfo.HasMovementFlag(MOVEFLAG_ONTRANSPORT) || GetTransport() != 0) {
+		SetAnticheatCount(0);
+		return false;
+	}
+	if (GetKnockBack()) {
+		SetAnticheatCount(0);
+		return false;
+	}
+
+	float x = movementInfo.GetPos()->x - GetPositionX();
+	float y = movementInfo.GetPos()->y - GetPositionY();
+	float z = movementInfo.GetPos()->z - GetPositionZ();
+	float SpeedXY = sqrt(x * x + y * y);
+	float SpeedXYZ = sqrt(x * x + y * y + z * z);
+
+	if (SpeedXYZ <= 0.0f) {
+		return false;
+	}
+	if (now_diffMs > 1000.00f)
+		now_diffMs = 1000.00f;
+	else if (now_diffMs < 500.00f)
+		now_diffMs = 500.00f;
+
+	float Speed = 0.0f, moveSpeed = 0.0f;
+	const float MaxXYZ = 45.0f;
+	//判断移动类型
+	if (movementInfo.HasMovementFlag(MOVEFLAG_SWIMMING)) {
+		moveSpeed = GetSpeed(MOVE_SWIM);
+		Speed = (moveSpeed * (now_diffMs / 1000.00f)) + (moveSpeed / 10.00f);
+	}
+	else {
+		moveSpeed = GetSpeed(MOVE_RUN);
+		Speed = (moveSpeed * (now_diffMs / 1000.00f)) + (moveSpeed / 10.00f);
+	}
+	if (GetLastSpeed() != moveSpeed) {
+		Speed = MaxXYZ;
+	}
+	SetLastSpeed(moveSpeed);
+	if (Enable == 3) {
+		sLog.outString(">>>> XYZ=%.2f XY=%.2f ZZ=%.2f Speed=%.2f  ms=%u Flags=%u %s", SpeedXYZ, SpeedXY, z, Speed, now_diffMs, movementInfo.GetMovementFlags(), GetName());
+	}
+	if (SpeedXY > (Speed * 2.0f) || z > (Speed * 2.0f)) {
+		sLog.outString(">>>>>>>>>TeleportTo>XY=%.2f ZZ=%.f2 Speed=%.2f  %s", SpeedXY, z, Speed*2.0f, GetName());
+		SetAnticheatCount(0);
+		if (Enable == 1) {
+			TeleportTo(GetMapId(), GetPositionX(), GetPositionY(), GetPositionZ(), GetOrientation());
+			return true;
+		}
+		return false;
+	}
+	if (SpeedXY > Speed || z > Speed) {
+		uint32 count = GetAnticheatCount();
+		count++;
+		SetAnticheatCount(count);
+		if (count == 1 && Enable == 1) {
+			UpdateLastPos();
+		}
+		if (count >= 3) {
+			sLog.outString(">>>>>>>>>>AntiCount=%u XY=%.2f ZZ=%.2f speed=%.2f  %s", count, SpeedXY, z, Speed, GetName());
+			SetAnticheatCount(0);
+			if (Enable == 1) {
+				TeleportTo(GetLastM(), GetLastX(), GetLastY(), GetLastZ(), GetLastO());
+				return true;
+			}
+		}
+		return false;
+	}
+	SetAnticheatCount(0);
+	return false;
+}

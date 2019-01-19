@@ -306,6 +306,9 @@ void WorldSession::HandleMovementOpcodes(WorldPacket & recv_data)
     if (plMover && !plMover->GetCheatData()->CheckTeleport(opcode, movementInfo))
         return;
 
+	if (plMover && plMover->AnticheatTest(opcode, movementInfo))
+		return;
+
     // Interrupt spell cast at move
     if (movementInfo.HasMovementFlag(MOVEFLAG_MASK_MOVING))
         mover->InterruptSpellsWithInterruptFlags(SPELL_INTERRUPT_FLAG_MOVEMENT);

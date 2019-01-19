@@ -10420,7 +10420,7 @@ void Unit::KnockBack(float angle, float horizontalSpeed, float verticalSpeed)
         data << float(horizontalSpeed);                     // Horizontal speed
         data << float(-verticalSpeed);                      // Z Movement speed (vertical)
         SendMovementMessageToSet(std::move(data), true);
-
+		ToPlayer()->SetKnockBack(true);
         ToPlayer()->GetCheatData()->KnockBack(horizontalSpeed, verticalSpeed, vcos, vsin);
     }
 }

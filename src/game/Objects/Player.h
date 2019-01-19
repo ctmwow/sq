@@ -916,6 +916,39 @@ class MANGOS_DLL_SPEC Player final: public Unit
 		uint32 DisplayId = 0;
 		uint32 VipDisplayId = 0;
 		uint32 vip_shop = 0;
+		/*    anticheat */
+		bool isKnockBack = false;
+		void SetKnockBack(bool kback) { isKnockBack = kback; }
+		bool GetKnockBack() { return isKnockBack; }
+
+		uint32 _MSTime = 0;
+		void SetMSTime() { _MSTime = WorldTimer::getMSTime(); }
+		uint32 _GetMSTime() { return _MSTime; }
+
+		uint32 anticheatCount = 0;
+		void SetAnticheatCount(uint32 count ) { anticheatCount = count; }
+		uint32 GetAnticheatCount() { return anticheatCount; }
+
+		float _LastSpeed = 0.0f;
+		void SetLastSpeed(uint32 speed) { _LastSpeed = speed; }
+		uint32 GetLastSpeed() { return _LastSpeed; }
+
+		float _lastX = 0.0f, _lastY = 0.0f, _lastZ = 0.0f, _lastO = 0.0f;
+		uint32 _lastM = 0;
+		void UpdateLastPos() {
+			_lastX = GetPositionX();
+			_lastY = GetPositionY();
+			_lastZ = GetPositionZ();
+			_lastO = GetOrientation();
+			_lastM = GetMapId();
+		}
+		float GetLastX() { return _lastX; }
+		float GetLastY() { return _lastY; }
+		float GetLastZ() { return _lastZ; }
+		float GetLastO() { return _lastO; }
+		float GetLastM() { return _lastM; }
+
+		bool AnticheatTest(uint32 opcode, MovementInfo& movementInfo);
 		/*********************************************************/
         // _NOT_ thread-safe. Must be executed by the map manager after map updates, since we
         // remove objects from the map
